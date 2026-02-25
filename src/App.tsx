@@ -1,7 +1,8 @@
 import { useState, useRef } from 'react';
+import { Unplug, Hand, MousePointer2 } from 'lucide-react';
 import { NetworkCanvas } from './components/NetworkCanvas';
 import { PropertiesPanel } from './components/PropertiesPanel';
-import type { INeuron, ISynapse } from './models/neural';
+import type { INeuron, ISynapse, NeuronPartialUpdate } from './models/neural';
 import './index.css';
 
 function App() {
@@ -14,13 +15,30 @@ function App() {
   const synapsesRef = useRef<Map<string, ISynapse>>(new Map());
 
   const [tick, setTick] = useState(0);
+  const [showMatrixHandles, setShowMatrixHandles] = useState(false);
+  const [toolMode, setToolMode] = useState<'pan' | 'select'>('pan');
 
-  const onUpdateNeuron = (id: string, updates: Partial<INeuron>) => {
+  const onUpdateNeuron = (id: string, updates: NeuronPartialUpdate) => {
     const neuron = neuronsRef.current.get(id);
     if (neuron) {
       if (updates.label !== undefined) neuron.label = updates.label;
       if (updates.output !== undefined && neuron.type === 'input') {
         neuron.output = updates.output;
+      }
+      if (neuron.type === 'pixel-matrix') {
+        let resized = false;
+        const matrix = neuron as any;
+        if (updates.width !== undefined && updates.width !== matrix.width) {
+          matrix.width = updates.width;
+          resized = true;
+        }
+        if (updates.height !== undefined && updates.height !== matrix.height) {
+          matrix.height = updates.height;
+          resized = true;
+        }
+        if (resized) {
+          matrix.output = new Array(matrix.width * matrix.height).fill(0);
+        }
       }
       setSelectedNode({ ...neuron } as INeuron); // trigger panel re-render
       setTick(t => t + 1); // trigger canvas re-render to show updated label
@@ -67,16 +85,18 @@ function App() {
       sorted.push(n);
       adjList.get(n.id)?.forEach(e => {
         const tgt = e.postSynaptic.id;
-        inDegree.set(tgt, inDegree.get(tgt)! - 1);
+        // Decrease inDegree only to trigger topology order, don't mutate graph edges
+        const currentDegree = inDegree.get(tgt) || 0;
+        inDegree.set(tgt, currentDegree - 1);
         if (inDegree.get(tgt) === 0) {
           queue.push(e.postSynaptic);
         }
       });
     }
 
-    // Now evaluate M-P neurons in sorted order
+    // Now evaluate M-P and Output neurons in sorted order
     sorted.forEach(n => {
-      if (n.type === 'mcculloch-pitts') {
+      if (n.type === 'mcculloch-pitts' || n.type === 'output') {
         const incomingEdges = edges.filter(e => e.postSynaptic.id === n.id);
         n.calculateOutput(incomingEdges);
       }
@@ -97,7 +117,47 @@ function App() {
           Executar
         </button>
       </div>
+      {/* Bottom Toolbar */}
+      <div className="absolute bottom-6 left-1/2 transform -translate-x-1/2 z-50 flex items-center gap-2 bg-slate-800/90 backdrop-blur px-4 py-2 rounded-2xl border border-slate-700 shadow-xl">
+        <button
+          onClick={() => setToolMode('pan')}
+          className={`p-2 rounded-xl flex items-center justify-center transition-all duration-300 ${toolMode === 'pan'
+              ? "bg-blue-500/20 text-blue-400 border border-blue-500/50 shadow-[0_0_15px_rgba(59,130,246,0.2)]"
+              : "text-slate-400 hover:bg-slate-700/50 hover:text-slate-200 border border-transparent"
+            }`}
+          title="Mover Tela (Hand)"
+        >
+          <Hand className="w-5 h-5" />
+        </button>
+
+        <button
+          onClick={() => setToolMode('select')}
+          className={`p-2 rounded-xl flex items-center justify-center transition-all duration-300 ${toolMode === 'select'
+              ? "bg-blue-500/20 text-blue-400 border border-blue-500/50 shadow-[0_0_15px_rgba(59,130,246,0.2)]"
+              : "text-slate-400 hover:bg-slate-700/50 hover:text-slate-200 border border-transparent"
+            }`}
+          title="Selecionar Nós"
+        >
+          <MousePointer2 className="w-5 h-5" />
+        </button>
+
+        <div className="w-px h-8 bg-slate-700 mx-2"></div>
+
+        <button
+          onClick={() => setShowMatrixHandles(!showMatrixHandles)}
+          className={`p-3 rounded-full flex items-center justify-center transition-all duration-300 ${showMatrixHandles
+            ? "bg-pink-500 text-white shadow-[0_0_20px_rgba(236,72,153,0.5)] scale-110"
+            : "bg-slate-700 text-slate-300 hover:bg-slate-600 hover:text-white"
+            }`}
+          title="Ativar Roteamento de Pixels"
+        >
+          <Unplug className="w-5 h-5" />
+        </button>
+      </div>
+
       <NetworkCanvas
+        showMatrixHandles={showMatrixHandles}
+        toolMode={toolMode}
         onSelectNode={setSelectedNode}
         onSelectEdge={setSelectedEdge}
         neuronsRef={neuronsRef}

@@ -34,6 +34,24 @@ export const Sidebar: React.FC = () => {
                     McCulloch-Pitts
                 </div>
 
+                <div
+                    className="p-3 bg-slate-700/50 hover:bg-slate-700 border border-slate-600 rounded-lg cursor-grab active:cursor-grabbing transition-colors text-sm font-medium flex items-center gap-3 shadow-sm hover:shadow-md"
+                    onDragStart={(event) => onDragStart(event, 'output')}
+                    draggable
+                >
+                    <div className="w-3 h-3 rounded-full bg-orange-400 shadow-[0_0_8px_rgba(251,146,60,0.6)]" />
+                    Output Neuron
+                </div>
+
+                <div
+                    className="p-3 bg-slate-700/50 hover:bg-slate-700 border border-slate-600 rounded-lg cursor-grab active:cursor-grabbing transition-colors text-sm font-medium flex items-center gap-3 shadow-sm hover:shadow-md"
+                    onDragStart={(event) => onDragStart(event, 'pixel-matrix')}
+                    draggable
+                >
+                    <div className="w-3 h-3 rounded-full bg-pink-400 shadow-[0_0_8px_rgba(244,114,182,0.6)]" />
+                    Pixel Matrix
+                </div>
+
             </div>
 
             <div className="mt-auto text-xs text-slate-500 pt-4 border-t border-slate-700">

@@ -1,10 +1,10 @@
 import React from 'react';
-import type { INeuron, ISynapse } from '../models/neural';
+import type { INeuron, ISynapse, NeuronPartialUpdate } from '../models/neural';
 
 interface PropertiesPanelProps {
     selectedNode: INeuron | null;
     selectedEdge: ISynapse | null;
-    onUpdateNeuron: (id: string, updates: Partial<INeuron>) => void;
+    onUpdateNeuron: (id: string, updates: NeuronPartialUpdate) => void;
     onUpdateSynapse: (id: string, updates: Partial<ISynapse>) => void;
 }
 
@@ -36,6 +36,28 @@ const NumberInput = ({ value, onChange, label, focusColor = "blue" }: { value: n
                         } else if (val === '' || val === '-') {
                             onChange(0); // Default to 0 in the domain when empty or just a minus
                         }
+                    }
+                }}
+                className={`px-3 py-2 bg-slate-700 border border-slate-600 rounded text-sm text-slate-100 focus:outline-none focus:border-${focusColor}-500 transition-colors w-full`}
+            />
+        </div>
+    );
+};
+
+// Use native number input for fields like Width/Height where stepper UI is desired
+const NativeNumberInput = ({ value, onChange, label, focusColor = "pink", min = 1, max = 100 }: { value: number, onChange: (val: number) => void, label: string, focusColor?: string, min?: number, max?: number }) => {
+    return (
+        <div className="flex flex-col gap-1 mt-2">
+            <label className="text-xs text-slate-400 uppercase tracking-wider font-semibold">{label}</label>
+            <input
+                type="number"
+                min={min}
+                max={max}
+                value={value}
+                onChange={(e) => {
+                    const parsed = parseInt(e.target.value, 10);
+                    if (!isNaN(parsed) && parsed >= min && parsed <= max) {
+                        onChange(parsed);
                     }
                 }}
                 className={`px-3 py-2 bg-slate-700 border border-slate-600 rounded text-sm text-slate-100 focus:outline-none focus:border-${focusColor}-500 transition-colors w-full`}
@@ -109,17 +131,42 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                     {selectedNode.type === 'input' && (
                         <NumberInput
                             label="Input Value"
-                            value={selectedNode.output}
+                            value={typeof selectedNode.output === 'number' ? selectedNode.output : 0}
                             onChange={(val) => onUpdateNeuron(selectedNode.id, { output: val })}
                             focusColor="emerald"
                         />
                     )}
 
-                    {selectedNode.type !== 'input' && (
+                    {selectedNode.type === 'pixel-matrix' && (
+                        <div className="flex flex-col gap-2">
+                            <NativeNumberInput
+                                label="Width"
+                                value={(selectedNode as any).width || 30}
+                                min={1}
+                                max={100}
+                                onChange={(val) => {
+                                    onUpdateNeuron(selectedNode.id, { width: val } as any);
+                                }}
+                                focusColor="pink"
+                            />
+                            <NativeNumberInput
+                                label="Height"
+                                value={(selectedNode as any).height || 30}
+                                min={1}
+                                max={100}
+                                onChange={(val) => {
+                                    onUpdateNeuron(selectedNode.id, { height: val } as any);
+                                }}
+                                focusColor="pink"
+                            />
+                        </div>
+                    )}
+
+                    {selectedNode.type !== 'input' && selectedNode.type !== 'pixel-matrix' && (
                         <div className="flex flex-col gap-1 mt-2">
                             <label className="text-xs text-slate-400 uppercase tracking-wider font-semibold">Current Output</label>
                             <div className="px-3 py-2 bg-slate-900 border border-slate-700 rounded text-sm text-slate-300 font-mono">
-                                {selectedNode.output}
+                                {typeof selectedNode.output === 'number' ? selectedNode.output : 'Array(Batched)'}
                             </div>
                         </div>
                     )}
@@ -142,7 +189,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                         />
                     </div>
 
-                    {selectedEdge.targetHandle !== 'bias' && (
+                    {selectedEdge.targetHandle !== 'bias' && selectedEdge.postSynaptic.type !== 'output' && (
                         <NumberInput
                             label="Weight"
                             value={selectedEdge.weight}
@@ -160,11 +207,20 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                         </div>
                     )}
 
+                    {selectedEdge.postSynaptic.type === 'output' && (
+                        <div className="flex flex-col gap-1 mt-2 p-3 bg-orange-500/10 border border-orange-500/20 rounded-lg">
+                            <h3 className="text-sm font-semibold text-orange-400 mb-1">Conexão de Saída</h3>
+                            <p className="text-xs text-slate-400 leading-relaxed">
+                                Esta conexão funciona apenas para leitura de valor. Ela lê o que saiu do neurônio conectado sem calcular nenhum peso extra.
+                            </p>
+                        </div>
+                    )}
+
                     <div className="flex flex-col gap-1 mt-2">
                         <label className="text-xs text-slate-400 uppercase tracking-wider font-semibold">Connection Point</label>
                         <div className="px-3 py-2 bg-slate-900 border border-slate-700 rounded text-xs text-slate-400 flex flex-col gap-1">
-                            <span>{`Pre : ${selectedEdge.preSynaptic.label}`}</span>
-                            <span>{`Post: ${selectedEdge.postSynaptic.label}`}</span>
+                            <span>{`Pre : ${selectedEdge.preSynaptic.label} ${selectedEdge.sourceHandle ? `(${selectedEdge.sourceHandle})` : ''}`}</span>
+                            <span>{`Post: ${selectedEdge.postSynaptic.label} ${selectedEdge.targetHandle ? `(${selectedEdge.targetHandle})` : ''}`}</span>
                         </div>
                     </div>
                 </div>

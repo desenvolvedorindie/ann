@@ -6,6 +6,7 @@ import {
     Controls,
     Background,
     MarkerType,
+    SelectionMode,
     applyNodeChanges,
     applyEdgeChanges,
 } from '@xyflow/react';
@@ -22,14 +23,19 @@ import '@xyflow/react/dist/style.css';
 import { Sidebar } from './Sidebar';
 import { NeuronNode } from './NeuronNode';
 import type { NeuronNodeData } from './NeuronNode';
-import { InputNeuron, MccullochPitts, Synapse } from '../models/neural';
+import { InputNeuron, MccullochPitts, OutputNeuron, PixelMatrix, Synapse } from '../models/neural';
 import type { NeuronType, INeuron, ISynapse } from '../models/neural';
+import { PixelMatrixNode, type PixelMatrixNodeData } from './PixelMatrixNode';
+import { MultiDropModal } from './MultiDropModal';
 
-const initialNodes: Node<NeuronNodeData>[] = [];
+export type NeuralNodeData = NeuronNodeData | PixelMatrixNodeData;
+
+const initialNodes: Node<NeuralNodeData>[] = [];
 const initialEdges: Edge[] = [];
 
 const nodeTypes = {
     neuron: NeuronNode,
+    'pixel-matrix': PixelMatrixNode,
 };
 
 interface FlowProps {
@@ -38,16 +44,22 @@ interface FlowProps {
     neuronsRef: React.MutableRefObject<Map<string, INeuron>>;
     synapsesRef: React.MutableRefObject<Map<string, ISynapse>>;
     tick: number;
+    showMatrixHandles: boolean;
+    toolMode: 'pan' | 'select';
 }
 
-const Flow: React.FC<FlowProps> = ({ onSelectNode, onSelectEdge, neuronsRef, synapsesRef, tick }) => {
+const Flow: React.FC<FlowProps> = ({ onSelectNode, onSelectEdge, neuronsRef, synapsesRef, tick, showMatrixHandles, toolMode }) => {
     const reactFlowWrapper = useRef<HTMLDivElement>(null);
-    const [nodes, setNodes] = useState<Node<NeuronNodeData>[]>(initialNodes);
+    const [nodes, setNodes] = useState<Node<NeuralNodeData>[]>(initialNodes);
     const [edges, setEdges] = useState<Edge[]>(initialEdges);
     const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance | null>(null);
 
+    // Modal state for multi-drop
+    const [isMultiDropOpen, setIsMultiDropOpen] = useState(false);
+    const [pendingDrop, setPendingDrop] = useState<{ type: NeuronType; position: { x: number, y: number } } | null>(null);
+
     const onNodesChangeHandler = useCallback(
-        (changes: NodeChange[]) => setNodes((nds) => applyNodeChanges(changes, nds) as Node<NeuronNodeData>[]),
+        (changes: NodeChange[]) => setNodes((nds) => applyNodeChanges(changes, nds) as Node<NeuralNodeData>[]),
         []
     );
 
@@ -67,7 +79,7 @@ const Flow: React.FC<FlowProps> = ({ onSelectNode, onSelectEdge, neuronsRef, syn
         setNodes((nds) => nds.map(n => {
             const neuron = neuronsRef.current.get(n.id);
             if (neuron) {
-                return { ...n, data: { ...n.data, neuron: { ...neuron } } };
+                return { ...n, data: { ...n.data, neuron: { ...neuron }, showHandles: showMatrixHandles } };
             }
             return n;
         }));
@@ -75,15 +87,18 @@ const Flow: React.FC<FlowProps> = ({ onSelectNode, onSelectEdge, neuronsRef, syn
             const synapse = synapsesRef.current.get(e.id);
             if (synapse) {
                 const isBias = e.targetHandle === 'bias';
-                const color = isBias ? '#eab308' : '#60a5fa';
+                const isOutputEdge = synapse.postSynaptic.type === 'output';
+                const color = isBias ? '#eab308' : (isOutputEdge ? '#f97316' : '#60a5fa');
+                const showLabel = !isBias && !isOutputEdge;
                 return {
                     ...e,
-                    label: isBias ? undefined : synapse.weight.toString(),
-                    labelStyle: isBias ? undefined : { fill: color, fontWeight: 'bold' },
-                    labelBgStyle: isBias ? undefined : { fill: '#1e293b', opacity: 0.8 },
-                    labelBgPadding: isBias ? undefined : [4, 4],
-                    labelBgBorderRadius: isBias ? undefined : 4,
-                    style: { stroke: color, strokeWidth: 2 },
+                    label: showLabel ? synapse.weight.toString() : undefined,
+                    labelStyle: showLabel ? { fill: color, fontWeight: 'bold' } : undefined,
+                    labelBgStyle: showLabel ? { fill: '#1e293b', opacity: 0.8 } : undefined,
+                    labelBgPadding: showLabel ? [4, 4] : undefined,
+                    labelBgBorderRadius: showLabel ? 4 : undefined,
+                    style: { stroke: color, strokeWidth: 2, strokeDasharray: isOutputEdge ? '5,5' : undefined },
+                    zIndex: showMatrixHandles ? 100 : -10, // Drop behind matrix naturally when not routing
                     markerEnd: {
                         type: MarkerType.ArrowClosed,
                         color: color,
@@ -92,20 +107,23 @@ const Flow: React.FC<FlowProps> = ({ onSelectNode, onSelectEdge, neuronsRef, syn
             }
             return e;
         }));
-    }, [tick, neuronsRef, synapsesRef, setNodes, setEdges]);
+    }, [tick, neuronsRef, synapsesRef, setNodes, setEdges, showMatrixHandles]);
 
     React.useEffect(() => {
         setNodes((nds) => {
             let changed = false;
             const nextNds = nds.map(n => {
-                const isBiasProvider = edges.some(e => e.source === n.id && e.targetHandle === 'bias');
-                if (n.data.isBiasProvider !== isBiasProvider) {
-                    changed = true;
-                    return { ...n, data: { ...n.data, isBiasProvider } };
+                // Ensure n.data has isBiasProvider for NeuronNodeData
+                if ('isBiasProvider' in n.data || n.type === 'neuron') {
+                    const isBiasProvider = edges.some(e => e.source === n.id && e.targetHandle === 'bias');
+                    if ((n.data as NeuronNodeData).isBiasProvider !== isBiasProvider) {
+                        changed = true;
+                        return { ...n, data: { ...n.data, isBiasProvider } };
+                    }
                 }
                 return n;
             });
-            return changed ? nextNds : nds;
+            return changed ? nextNds as Node<NeuralNodeData>[] : nds;
         });
     }, [edges, setNodes]);
 
@@ -117,25 +135,38 @@ const Flow: React.FC<FlowProps> = ({ onSelectNode, onSelectEdge, neuronsRef, syn
             const postNeuron = neuronsRef.current.get(params.target);
 
             if (preNeuron && postNeuron) {
-                // Create OOP instance of Synapse
-                const synapse = new Synapse(preNeuron, postNeuron, 1, params.targetHandle || 'input');
+                if (postNeuron.type === 'output') {
+                    const hasExistingConnection = edges.some(e => e.target === params.target);
+                    if (hasExistingConnection) {
+                        return; // Output neuron accepts only 1 connection
+                    }
+                }
+
+                // Create OOP instance of Synapse, logging source handle if available
+                const synapse = new Synapse(preNeuron, postNeuron, 1, params.sourceHandle || undefined, params.targetHandle || 'input');
                 synapsesRef.current.set(synapse.id, synapse);
 
                 // Map to React Flow Edge
                 const isBias = params.targetHandle === 'bias';
-                const color = isBias ? '#eab308' : '#60a5fa';
+                const isOutputEdge = postNeuron.type === 'output';
+                const color = isBias ? '#eab308' : (isOutputEdge ? '#f97316' : '#60a5fa');
+                const showLabel = !isBias && !isOutputEdge;
+
                 const newEdge: Edge = {
                     id: synapse.id,
                     source: params.source,
+                    sourceHandle: params.sourceHandle,
                     target: params.target,
                     targetHandle: params.targetHandle,
-                    label: isBias ? undefined : synapse.weight.toString(),
-                    labelStyle: isBias ? undefined : { fill: color, fontWeight: 'bold' },
-                    labelBgStyle: isBias ? undefined : { fill: '#1e293b', opacity: 0.8 },
-                    labelBgPadding: isBias ? undefined : [4, 4],
-                    labelBgBorderRadius: isBias ? undefined : 4,
+                    label: showLabel ? synapse.weight.toString() : undefined,
+                    labelStyle: showLabel ? { fill: color, fontWeight: 'bold' } : undefined,
+                    labelBgStyle: showLabel ? { fill: '#1e293b', opacity: 0.8 } : undefined,
+                    labelBgPadding: showLabel ? [4, 4] : undefined,
+                    labelBgBorderRadius: showLabel ? 4 : undefined,
                     animated: true,
-                    style: { stroke: color, strokeWidth: 2 },
+                    type: 'straight',
+                    zIndex: showMatrixHandles ? 100 : -10, // Edge drops behind drawing surface
+                    style: { stroke: color, strokeWidth: 2, strokeDasharray: isOutputEdge ? '5,5' : undefined },
                     markerEnd: {
                         type: MarkerType.ArrowClosed,
                         color: color,
@@ -144,13 +175,55 @@ const Flow: React.FC<FlowProps> = ({ onSelectNode, onSelectEdge, neuronsRef, syn
                 setEdges((eds) => addEdge(newEdge, eds));
             }
         },
-        [synapsesRef, neuronsRef]
+        [synapsesRef, neuronsRef, edges]
     );
 
     const onDragOver = useCallback((event: React.DragEvent) => {
         event.preventDefault();
         event.dataTransfer.dropEffect = 'move';
     }, []);
+
+    const instantiateNode = useCallback((type: NeuronType, position: { x: number, y: number }) => {
+        let newNeuronObj: INeuron;
+        if (type === 'input') {
+            newNeuronObj = new InputNeuron('Input Neuron');
+        } else if (type === 'output') {
+            newNeuronObj = new OutputNeuron('Output Neuron');
+        } else if (type === 'pixel-matrix') {
+            newNeuronObj = new PixelMatrix('Draw Area', 5, 5);
+        } else {
+            newNeuronObj = new MccullochPitts('M-P Neuron', 0);
+        }
+
+        neuronsRef.current.set(newNeuronObj.id, newNeuronObj);
+
+        const nodeTypeName = type === 'pixel-matrix' ? 'pixel-matrix' : 'neuron';
+
+        return {
+            id: newNeuronObj.id,
+            type: nodeTypeName,
+            position,
+            data: { neuron: newNeuronObj },
+        } as Node<NeuralNodeData>;
+    }, [neuronsRef]);
+
+    const handleMultiDropConfirm = useCallback((count: number) => {
+        if (!pendingDrop) return;
+
+        const newNodes: Node<NeuralNodeData>[] = [];
+        const { type, position } = pendingDrop;
+
+        // Vertical spacing offset
+        const yOffset = type === 'pixel-matrix' ? 160 : 100;
+
+        for (let i = 0; i < count; i++) {
+            const pos = { x: position.x, y: position.y + (i * yOffset) };
+            newNodes.push(instantiateNode(type, pos));
+        }
+
+        setNodes((nds) => nds.concat(newNodes));
+        setPendingDrop(null);
+    }, [pendingDrop, instantiateNode]);
 
     const onDrop = useCallback(
         (event: React.DragEvent) => {
@@ -168,26 +241,17 @@ const Flow: React.FC<FlowProps> = ({ onSelectNode, onSelectEdge, neuronsRef, syn
                 y: event.clientY - reactFlowBounds.top,
             });
 
-            // OOP Instantiation
-            let newNeuronObj: INeuron;
-            if (type === 'input') {
-                newNeuronObj = new InputNeuron('Input Neuron');
+            if (event.ctrlKey || event.metaKey) {
+                // Open modal for multiple instantiation
+                setPendingDrop({ type, position });
+                setIsMultiDropOpen(true);
             } else {
-                newNeuronObj = new MccullochPitts('M-P Neuron', 0);
+                // Single instantiation
+                const newNode = instantiateNode(type, position);
+                setNodes((nds) => nds.concat(newNode));
             }
-
-            neuronsRef.current.set(newNeuronObj.id, newNeuronObj);
-
-            const newNode: Node<NeuronNodeData> = {
-                id: newNeuronObj.id,
-                type: 'neuron',
-                position,
-                data: { neuron: newNeuronObj },
-            };
-
-            setNodes((nds) => nds.concat(newNode));
         },
-        [reactFlowInstance, neuronsRef]
+        [reactFlowInstance, instantiateNode]
     );
 
     const onSelectionChange = useCallback((params: OnSelectionChangeParams) => {
@@ -222,16 +286,41 @@ const Flow: React.FC<FlowProps> = ({ onSelectNode, onSelectEdge, neuronsRef, syn
                     onDrop={onDrop}
                     onDragOver={onDragOver}
                     onSelectionChange={onSelectionChange}
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    isValidConnection={(connection) => {
+                        console.log('Validating connection payload:', connection);
+                        // Output neuron only accepts 1 connection
+                        const targetNode = nodes.find(n => n.id === connection.target);
+                        if (targetNode && targetNode.data.neuron.type === 'output') {
+                            const hasExisting = edges.some(e => e.target === connection.target);
+                            if (hasExisting) {
+                                console.log('Rejected: Output neuron already has connection');
+                                return false;
+                            }
+                        }
+
+                        // Check if pixel matrix tries to connect to itself (invalid)
+                        if (connection.source === connection.target) {
+                            console.log('Rejected: Connect to self');
+                            return false;
+                        }
+
+                        console.log('Connection accepted');
+                        return true;
+                    }}
                     nodeTypes={nodeTypes as any}
                     defaultEdgeOptions={{
-                        type: 'default', // standard edge
+                        type: 'straight', // straight edge instead of bezier curve
                         markerEnd: { type: MarkerType.ArrowClosed, color: '#60a5fa' },
                         style: { strokeWidth: 2, stroke: '#60a5fa' },
                         animated: true,
                     }}
                     deleteKeyCode={['Backspace', 'Delete']}
                     fitView
+                    panOnDrag={toolMode === 'pan'}
+                    selectionOnDrag={toolMode === 'select'}
+                    panOnScroll={toolMode === 'select'} // Allow panning with wheel when selection is dragging mode
+                    selectionMode={SelectionMode.Partial} // Partial selection
+                    proOptions={{ hideAttribution: true }}
                     className="bg-slate-900"
                 >
                     <Background
@@ -244,6 +333,16 @@ const Flow: React.FC<FlowProps> = ({ onSelectNode, onSelectEdge, neuronsRef, syn
                     />
                 </ReactFlow>
             </div>
+
+            <MultiDropModal
+                isOpen={isMultiDropOpen}
+                nodeType={pendingDrop?.type || null}
+                onClose={() => {
+                    setIsMultiDropOpen(false);
+                    setPendingDrop(null);
+                }}
+                onConfirm={handleMultiDropConfirm}
+            />
         </div>
     );
 };
@@ -254,6 +353,8 @@ export interface NetworkCanvasProps {
     neuronsRef: React.MutableRefObject<Map<string, INeuron>>;
     synapsesRef: React.MutableRefObject<Map<string, ISynapse>>;
     tick: number;
+    showMatrixHandles: boolean;
+    toolMode: 'pan' | 'select';
 }
 
 export const NetworkCanvas: React.FC<NetworkCanvasProps> = (props) => {
