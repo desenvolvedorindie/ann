@@ -12,6 +12,10 @@ export class OutputNeuron implements INeuron {
         this.label = label;
     }
 
+    get size(): number {
+        return 1;
+    }
+
     calculateOutput(incomingSynapses: ISynapse[]): number {
         if (incomingSynapses.length > 0) {
             const synapse = incomingSynapses[0];

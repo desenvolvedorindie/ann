@@ -1,6 +1,6 @@
 import React, { memo } from 'react';
 import type { NodeProps, Node } from '@xyflow/react';
-import { NodeResizer, Handle, Position } from '@xyflow/react';
+import { NodeResizer, Handle, Position, useReactFlow } from '@xyflow/react';
 import { Layers } from 'lucide-react';
 import clsx from 'clsx';
 import { NeuralLayer } from '../models/neural';
@@ -9,8 +9,22 @@ export type LayerNodeData = Record<string, unknown> & {
     layer: NeuralLayer;
 };
 
-export const LayerNode: React.FC<NodeProps<Node<LayerNodeData>>> = memo(({ data, selected }) => {
+export const LayerNode: React.FC<NodeProps<Node<LayerNodeData>>> = memo(({ data, id, selected }) => {
     const layer = data.layer;
+    const { getNodes } = useReactFlow();
+
+    // Calculate total neurons (including pixel matrix inner sizes)
+    const children = getNodes().filter(n => n.parentId === id);
+    const totalNeurons = children.reduce((acc, child) => {
+        const neuron = (child.data as { neuron?: any })?.neuron;
+        if (!neuron) return acc;
+
+        if (neuron.type === 'pixel-matrix' && typeof neuron.width === 'number' && typeof neuron.height === 'number') {
+            return acc + (neuron.width * neuron.height);
+        }
+        // Attempt to use size getter if available, otherwise default to 1
+        return acc + (neuron.size || 1);
+    }, 0);
 
     return (
         <>
@@ -33,6 +47,11 @@ export const LayerNode: React.FC<NodeProps<Node<LayerNodeData>>> = memo(({ data,
                 <div className="absolute top-0 left-4 -translate-y-1/2 flex items-center gap-2 px-3 py-1 bg-slate-800 border border-slate-600 rounded-full shadow-lg pointer-events-auto cursor-pointer z-10">
                     <Layers className="w-4 h-4 text-blue-400" />
                     <span className="text-xs font-bold text-slate-200 uppercase tracking-widest">{layer.label}</span>
+                    {totalNeurons > 0 && (
+                        <span className="text-[10px] font-mono text-slate-400 bg-slate-900 px-1.5 py-0.5 rounded ml-1">
+                            {totalNeurons} {totalNeurons === 1 ? 'neurônio' : 'neurônios'}
+                        </span>
+                    )}
                 </div>
 
                 {/* Macro Connectors */}
@@ -53,13 +72,7 @@ export const LayerNode: React.FC<NodeProps<Node<LayerNodeData>>> = memo(({ data,
 
                 {/* Drop Zone with Slot Guides */}
                 <div className="flex-1 w-full h-full relative z-0">
-                    {[0, 1, 2, 3, 4, 5].map(i => (
-                        <div
-                            key={i}
-                            className="absolute left-[30px] right-[30px] h-[2px] border-t border-dashed border-slate-700/40"
-                            style={{ top: `${50 + (i * 110)}px` }}
-                        />
-                    ))}
+                    {/* Removed static decorative drop zone lines as they cause confusion */}
                 </div>
             </div>
         </>

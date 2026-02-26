@@ -16,6 +16,7 @@ export const NeuronNode: React.FC<NodeProps<Node<NeuronNodeData>>> = ({ id, data
     const isInput = neuron.type === 'input';
     const isOutput = neuron.type === 'output';
     const isMP = neuron.type === 'mcculloch-pitts';
+    const isBias = neuron.type === 'bias';
     const isBiasProvider = !!data.isBiasProvider;
 
     const onDelete = (event: React.MouseEvent) => {
@@ -32,10 +33,12 @@ export const NeuronNode: React.FC<NodeProps<Node<NeuronNodeData>>> = ({ id, data
                     'bg-slate-800 border-blue-500 shadow-blue-500/20 scale-105': selected && isMP && !isBiasProvider,
                     'bg-slate-800 border-yellow-500 shadow-yellow-500/20 scale-105': selected && isBiasProvider,
                     'bg-slate-800 border-orange-500 shadow-orange-500/20 scale-105': selected && isOutput,
+                    'bg-amber-900/30 border-amber-400/70 shadow-amber-500/20 scale-105': selected && isBias,
                     'border-emerald-500/50 shadow-emerald-500/10': isInput && !selected && !isBiasProvider,
                     'border-yellow-500/50 shadow-yellow-500/10': isInput && !selected && isBiasProvider,
                     'border-blue-500/50 shadow-blue-500/10': isMP && !selected,
                     'border-orange-500/50 shadow-orange-500/10': isOutput && !selected,
+                    'border-amber-400/50 shadow-amber-500/10 bg-amber-950/30': isBias && !selected,
                 }
             )}
         >
@@ -47,8 +50,9 @@ export const NeuronNode: React.FC<NodeProps<Node<NeuronNodeData>>> = ({ id, data
             >
                 <X className="w-4 h-4" />
             </button>
-            {/* Input Handle */}
-            {!isInput && (
+
+            {/* Input Handle — not shown for input or bias neurons (they have no incoming connections) */}
+            {!isInput && !isBias && (
                 <Handle
                     type="target"
                     position={Position.Left}
@@ -57,10 +61,9 @@ export const NeuronNode: React.FC<NodeProps<Node<NeuronNodeData>>> = ({ id, data
                 />
             )}
 
-            {/* Threshold (Bias) Handle */}
+            {/* Legacy Threshold (Bias) Handle — only for M-P neurons, for backward compat with the old InputNeuron-as-bias approach */}
             {isMP && (
                 <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center">
-                    <span className="text-[9px] uppercase tracking-widest text-yellow-500 font-bold mb-1 opacity-0 group-hover:opacity-100 transition-opacity absolute -top-4 whitespace-nowrap">Threshold</span>
                     <Handle
                         type="target"
                         position={Position.Top}
@@ -81,10 +84,14 @@ export const NeuronNode: React.FC<NodeProps<Node<NeuronNodeData>>> = ({ id, data
                                 'bg-yellow-500/20 text-yellow-400 ring-yellow-500/50': isInput && isBiasProvider,
                                 'bg-blue-500/20 text-blue-400 ring-blue-500/50': isMP,
                                 'bg-orange-500/20 text-orange-400 ring-orange-500/50': isOutput,
+                                'bg-amber-500/20 text-amber-400 ring-amber-500/50': isBias,
                             }
                         )}
                     >
-                        <Network className="w-3 h-3" />
+                        {isBias
+                            ? <span className="text-[10px] font-black text-amber-400">β</span>
+                            : <Network className="w-3 h-3" />
+                        }
                     </div>
 
                     <div className="flex flex-col">
@@ -92,60 +99,67 @@ export const NeuronNode: React.FC<NodeProps<Node<NeuronNodeData>>> = ({ id, data
                             {neuron.label}
                         </span>
                         <span className="text-[7px] uppercase tracking-wider text-slate-400 font-medium truncate leading-none">
-                            {neuron.type === 'mcculloch-pitts' ? 'M-Pitts' : (isOutput ? 'Output' : neuron.type)}
+                            {neuron.type === 'mcculloch-pitts' ? 'M-Pitts' : isOutput ? 'Output' : isBias ? 'Bias' : neuron.type}
                         </span>
                     </div>
                 </div>
 
-                <div className="mt-0.5 bg-slate-900/50 rounded flex flex-row justify-between items-center px-2 py-1.5 border border-slate-700/50 gap-3">
-                    {isMP && (
-                        <div className="flex flex-col flex-1 border-r border-slate-700/50 pr-2">
+                {!isBias && (
+                    <div className="mt-0.5 bg-slate-900/50 rounded flex flex-row justify-between items-center px-2 py-1.5 border border-slate-700/50 gap-3">
+                        {isMP && (
+                            <div className="flex flex-col flex-1 border-r border-slate-700/50 pr-2">
+                                <span className="text-[7px] uppercase tracking-wider text-slate-400 font-bold leading-tight">
+                                    Limiar
+                                </span>
+                                <span className="text-[10px] font-mono font-bold text-orange-400 leading-none">
+                                    {(neuron as McCullochPitts).bias?.toFixed(2) ?? '0.00'}
+                                </span>
+                            </div>
+                        )}
+
+                        {!isInput && (neuron as McCullochPitts).netInput !== undefined && (
+                            <div className={clsx("flex flex-col", isMP ? "flex-1 border-r border-slate-700/50 pr-2" : "")}>
+                                <span className="text-[7px] uppercase tracking-wider text-slate-400 font-bold leading-tight">
+                                    Soma
+                                </span>
+                                <span className="text-[10px] font-mono font-bold text-yellow-400 leading-none">
+                                    {(neuron as McCullochPitts).netInput?.toFixed(2) ?? '0.00'}
+                                </span>
+                            </div>
+                        )}
+
+                        <div className={clsx("flex", isMP ? "flex-col flex-1" : "flex-row items-center justify-between w-full gap-2")}>
                             <span className="text-[7px] uppercase tracking-wider text-slate-400 font-bold leading-tight">
-                                Limiar
+                                {isInput ? 'Valor' : isOutput ? 'Saída' : 'Step'}
                             </span>
-                            <span className="text-[10px] font-mono font-bold text-orange-400 leading-none">
-                                {(neuron as McCullochPitts).bias?.toFixed(2) ?? '0.00'}
+                            <span className={clsx(
+                                "text-[12px] font-mono font-bold font-black leading-none",
+                                {
+                                    "text-slate-500": neuron.output === 0 && isMP,
+                                    "text-blue-400": (neuron.output as number) > 0 && isMP,
+                                    "text-emerald-400": isInput && !isBiasProvider,
+                                    "text-yellow-400": isInput && isBiasProvider,
+                                    "text-orange-400": isOutput,
+                                }
+                            )}>
+                                {isOutput ? Number((neuron.output as number).toFixed(4)) : (neuron.output as number)}
                             </span>
                         </div>
-                    )}
-
-                    {!isInput && (neuron as McCullochPitts).netInput !== undefined && (
-                        <div className={clsx("flex flex-col", isMP ? "flex-1 border-r border-slate-700/50 pr-2" : "")}>
-                            <span className="text-[7px] uppercase tracking-wider text-slate-400 font-bold leading-tight">
-                                Soma
-                            </span>
-                            <span className="text-[10px] font-mono font-bold text-yellow-400 leading-none">
-                                {(neuron as McCullochPitts).netInput?.toFixed(2) ?? '0.00'}
-                            </span>
-                        </div>
-                    )}
-
-                    <div className={clsx("flex", isMP ? "flex-col flex-1" : "flex-row items-center justify-between w-full gap-2")}>
-                        <span className="text-[7px] uppercase tracking-wider text-slate-400 font-bold leading-tight">
-                            {isInput ? 'Valor' : (isOutput ? 'Saída' : 'Step')}
-                        </span>
-                        <span className={clsx(
-                            "text-[12px] font-mono font-bold font-black leading-none",
-                            {
-                                "text-slate-500": neuron.output === 0 && isMP,
-                                "text-blue-400": (neuron.output as number) > 0 && isMP,
-                                "text-emerald-400": isInput && !isBiasProvider,
-                                "text-yellow-400": isInput && isBiasProvider,
-                                "text-orange-400": isOutput,
-                            }
-                        )}>
-                            {isOutput ? Number((neuron.output as number).toFixed(4)) : (neuron.output as number)}
-                        </span>
                     </div>
-                </div>
+                )}
             </div>
 
-            {/* Output Handle */}
+            {/* Output Handle — shown for all except output neurons */}
             {!isOutput && (
                 <Handle
                     type="source"
                     position={Position.Right}
-                    className="!w-4 !h-4 !bg-slate-800 !border-2 !border-blue-400 hover:!bg-blue-400 !transition-colors"
+                    className={clsx(
+                        "!w-4 !h-4 !bg-slate-800 !border-2 !transition-colors",
+                        isBias
+                            ? "!border-amber-400 hover:!bg-amber-400"
+                            : "!border-blue-400 hover:!bg-blue-400"
+                    )}
                 />
             )}
         </div>

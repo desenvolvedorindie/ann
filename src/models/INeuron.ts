@@ -6,6 +6,7 @@ export interface INeuron {
     type: NeuronType;
     label: string;
     output: number | number[];
+    get size(): number;
     calculateOutput(incomingSynapses: ISynapse[]): number | number[];
 }
 

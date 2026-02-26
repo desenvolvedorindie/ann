@@ -134,21 +134,28 @@ export const PixelMatrixNode: React.FC<NodeProps<Node<PixelMatrixNodeData>>> = (
                             onPointerDown={(e) => handlePointerDown(i, e)}
                             onPointerEnter={() => handleDraw(i)}
                             className={clsx(
-                                "relative w-full h-full border-[0.5px] border-slate-200/50 flex items-center justify-center",
-                                val > 0 ? "bg-slate-900" : "bg-transparent"
+                                "relative w-full h-full border-[0.5px] border-slate-200/50 flex items-center justify-center transition-colors duration-200",
+                                val > 0 ? "bg-black" : "bg-white"
                             )}
                             style={{ userSelect: 'none' }}
                         >
-                            {/* Inner Handles overlay */}
+                            {/* Inner Handles overlay - Two handles stacked exactly on top of each other to simulate a single connection point */}
                             <div className={clsx(
                                 "absolute inset-0 flex items-center justify-center",
                                 showHandles ? "opacity-100" : "opacity-0 pointer-events-none"
                             )}>
                                 <Handle
+                                    type="target"
+                                    position={Position.Left}
+                                    id={`pixel-in-${i}`}
+                                    className="!absolute !transform-none !left-0 !right-0 !top-0 !bottom-0 !m-auto !w-1.5 !h-1.5 !min-w-0 !min-h-0 !bg-transparent !border-0"
+                                    style={{ zIndex: 109 }} // Slightly below source so hover effects trigger on source
+                                />
+                                <Handle
                                     type="source"
                                     position={Position.Right}
                                     id={`pixel-${i}`}
-                                    className="!relative !transform-none !right-auto !top-auto !w-1.5 !h-1.5 !min-w-0 !min-h-0 !bg-pink-500 !border-0 hover:!bg-white hover:!scale-150 transition-transform"
+                                    className="!absolute !transform-none !left-0 !right-0 !top-0 !bottom-0 !m-auto !w-1.5 !h-1.5 !min-w-0 !min-h-0 !bg-pink-500 !border-0 hover:!bg-white hover:!scale-150 transition-transform"
                                     style={{ zIndex: 110 }}
                                 />
                             </div>

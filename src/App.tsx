@@ -23,8 +23,9 @@ function App() {
   const [tick, setTick] = useState(0);
   const [showMatrixHandles, setShowMatrixHandles] = useState(false);
   const [toolMode, setToolMode] = useState<'pan' | 'select'>('pan');
-  const [workspace, setWorkspace] = useState<'database' | 'architecture' | 'training' | 'execution'>('architecture');
+  const [workspace, setWorkspace] = useState<'data' | 'architecture' | 'training' | 'execution'>('architecture');
   const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([]);
+  const [layerChildIds, setLayerChildIds] = useState<string[]>([]);
   const [isSpaceDown, setIsSpaceDown] = useState(false);
   const [historyState, setHistoryState] = useState<HistoryState | null>(null);
   const [showRawConnections, setShowRawConnections] = useState(false);
@@ -34,10 +35,19 @@ function App() {
 
   // Training State
   const [isTraining, setIsTraining] = useState(false);
+  const [trainingExpanded, setTrainingExpanded] = useState(false);
   const [trainingDatasetId, setTrainingDatasetId] = useState<string>(defaultLogicGates[0].id);
   const [trainingEpoch, setTrainingEpoch] = useState(0);
   const [currentFrame, setCurrentFrame] = useState(0);
   const [trainingData, setTrainingData] = useState<TrainingDataPoint[]>([]);
+
+  // Refs to track mutable frame/epoch synchronously inside the interval
+  // (avoids React StrictMode double-invocation of functional updaters)
+  const currentFrameRef = useRef(0);
+  const trainingEpochRef = useRef(0);
+  // Random-walk position on the error surface
+  const x1Ref = useRef((Math.random() * 6) - 3);
+  const x2Ref = useRef((Math.random() * 6) - 3);
 
   // Refs to access latest training state inside the interval without re-creating it
   const datasetsRef = useRef<Dataset[]>(defaultLogicGates);
@@ -51,6 +61,11 @@ function App() {
 
   const onHistoryChange = useCallback((state: HistoryState) => {
     setHistoryState(state);
+  }, []);
+
+  const onSelectNode = useCallback((node: INeuron | null, childIds?: string[]) => {
+    setSelectedNode(node);
+    setLayerChildIds(childIds || []);
   }, []);
 
   useEffect(() => {
@@ -81,26 +96,28 @@ function App() {
         const activeDataset = datasetsRef.current.find(d => d.id === trainingDatasetIdRef.current)
           || datasetsRef.current[0];
 
-        setCurrentFrame((prevFrame) => {
-          const nextFrame = prevFrame + 1;
+        const nextFrame = currentFrameRef.current + 1;
 
-          if (nextFrame >= activeDataset.rows.length) {
-            // End of epoch
-            setTrainingEpoch((prevEpoch) => {
-              const nextEpoch = prevEpoch + 1;
-              const newError = Math.max(0.01, 1.0 * Math.exp(-0.05 * nextEpoch) + (Math.random() * 0.05));
-              setTrainingData((currentData) => [
-                ...currentData,
-                { epoch: nextEpoch, error: Number(newError.toFixed(4)) }
-              ].slice(-50));
-              return nextEpoch;
-            });
-            return 0; // Reset frame
-          }
-
-          return nextFrame;
-        });
-      }, 500);
+        if (nextFrame >= activeDataset.rows.length) {
+          // End of epoch — use ref values to avoid StrictMode double-invocation
+          const nextEpoch = trainingEpochRef.current + 1;
+          const newError = Math.max(0.01, 1.0 * Math.exp(-0.05 * nextEpoch) + (Math.random() * 0.05));
+          // Random walk on the error surface (drift ±0.3 per epoch, clamped to [-3, 3])
+          const newX1 = Math.max(-3, Math.min(3, x1Ref.current + (Math.random() - 0.5) * 0.6));
+          const newX2 = Math.max(-3, Math.min(3, x2Ref.current + (Math.random() - 0.5) * 0.6));
+          x1Ref.current = newX1;
+          x2Ref.current = newX2;
+          const surfaceZ = newX1 ** 2 + newX2 ** 2 + newX1 * newX2 + newX1 + newX2 + 5;
+          currentFrameRef.current = 0;
+          trainingEpochRef.current = nextEpoch;
+          setCurrentFrame(0);
+          setTrainingEpoch(nextEpoch);
+          setTrainingData(prev => [...prev, { epoch: nextEpoch, error: Number(newError.toFixed(4)), x1: newX1, x2: newX2, z: surfaceZ }].slice(-50));
+        } else {
+          currentFrameRef.current = nextFrame;
+          setCurrentFrame(nextFrame);
+        }
+      }, 150);
     } else {
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
@@ -122,6 +139,10 @@ function App() {
 
   const handleResetTraining = () => {
     setIsTraining(false);
+    currentFrameRef.current = 0;
+    trainingEpochRef.current = 0;
+    x1Ref.current = (Math.random() * 6) - 3;
+    x2Ref.current = (Math.random() * 6) - 3;
     setTrainingEpoch(0);
     setCurrentFrame(0);
     setTrainingData([]);
@@ -240,9 +261,9 @@ function App() {
       });
     }
 
-    // Now evaluate M-P and Output neurons in sorted order
+    // Now evaluate M-P, Output, and Pixel-Matrix neurons in sorted order
     sorted.forEach(n => {
-      if (n.type === 'mcculloch-pitts' || n.type === 'output') {
+      if (n.type === 'mcculloch-pitts' || n.type === 'output' || n.type === 'pixel-matrix') {
         const incomingEdges = edges.filter(e => e.postSynaptic.id === n.id);
         n.calculateOutput(incomingEdges);
       }
@@ -253,7 +274,7 @@ function App() {
 
   const isExecutionMode = workspace === 'execution';
   const isTrainingMode = workspace === 'training';
-  const isDatabaseMode = workspace === 'database';
+  const isDatabaseMode = workspace === 'data';
   const isArchitectureMode = workspace === 'architecture';
 
   return (
@@ -261,7 +282,7 @@ function App() {
       {/* Workspace Switcher Header (Premiere Style) */}
       <div className="h-10 bg-[#1e1e1e] border-b border-slate-800 flex items-center justify-center shrink-0 z-50">
         <div className="flex space-x-1 p-1 bg-[#121212] rounded-md">
-          {(['database', 'architecture', 'training', 'execution'] as const).map((ws) => (
+          {(['data', 'architecture', 'training', 'execution'] as const).map((ws) => (
             <button
               key={ws}
               onClick={() => setWorkspace(ws)}
@@ -299,7 +320,7 @@ function App() {
           )}
 
           {/* Top action bar (Training Controls) - Only in Training mode */}
-          {isTrainingMode && (
+          {isTrainingMode && !trainingExpanded && (
             <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-50 flex items-center gap-2 bg-slate-800/90 backdrop-blur px-2 py-1.5 rounded-full border border-slate-700 shadow-xl">
               <button
                 onClick={handleStartStopTraining}
@@ -420,13 +441,28 @@ function App() {
 
           <div className="flex flex-row flex-1 min-h-0 overflow-hidden relative">
             <div className="flex flex-col flex-1 h-full w-full relative">
+              {/* View toolbar — visible in training and execution workspaces */}
+              {(workspace === 'training' || workspace === 'execution') && (
+                <div className="absolute bottom-6 left-1/2 transform -translate-x-1/2 z-50 flex items-center gap-2 bg-slate-800/90 backdrop-blur px-4 py-2 rounded-2xl border border-slate-700 shadow-xl">
+                  <button
+                    onClick={() => setShowRawConnections(!showRawConnections)}
+                    className={`p-3 rounded-full flex items-center justify-center transition-all duration-300 ${showRawConnections
+                      ? "bg-purple-500 text-white shadow-[0_0_20px_rgba(168,85,247,0.5)] scale-110"
+                      : "bg-slate-700 text-slate-300 hover:bg-slate-600 hover:text-white"
+                      }`}
+                    title="Mostrar Conexões Brutas (Layers)"
+                  >
+                    <Network className="w-5 h-5" />
+                  </button>
+                </div>
+              )}
               <NetworkCanvas
                 ref={canvasRef}
                 showRawConnections={showRawConnections}
                 showMatrixHandles={showMatrixHandles}
                 toolMode={toolMode}
                 onSetToolMode={setToolMode}
-                onSelectNode={setSelectedNode}
+                onSelectNode={onSelectNode}
                 onSelectEdge={setSelectedEdge}
                 onSelectedNodesChange={setSelectedNodeIds}
                 onHistoryChange={onHistoryChange}
@@ -455,6 +491,9 @@ function App() {
                   selectedEdge={selectedEdge}
                   onUpdateNeuron={onUpdateNeuron}
                   onUpdateSynapse={onUpdateSynapse}
+                  onSelectNodeById={(id) => canvasRef.current?.selectNode(id)}
+                  layerChildIds={layerChildIds}
+                  neuronsRef={neuronsRef}
                   synapses={Array.from(synapsesRef.current.values())}
                 />
               </div>
@@ -466,6 +505,8 @@ function App() {
                 <TrainingWorkspace
                   epoch={trainingEpoch}
                   data={trainingData}
+                  expanded={trainingExpanded}
+                  onExpandChange={setTrainingExpanded}
                 />
               </div>
             )}
@@ -481,7 +522,7 @@ function App() {
                 setCurrentFrame(0);
               }}
               currentFrame={currentFrame}
-              onFrameSelect={setCurrentFrame}
+              onFrameSelect={(frame) => { currentFrameRef.current = frame; setCurrentFrame(frame); }}
             />
           )}
         </div>

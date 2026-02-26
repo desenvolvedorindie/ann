@@ -7,6 +7,9 @@ interface PropertiesPanelProps {
     onUpdateNeuron: (id: string, updates: NeuronPartialUpdate) => void;
     onUpdateSynapse: (id: string, updates: Partial<ISynapse>) => void;
     synapses?: ISynapse[];
+    onSelectNodeById?: (id: string) => void;
+    layerChildIds?: string[];
+    neuronsRef?: React.MutableRefObject<Map<string, INeuron>>;
 }
 
 const NumberInput = ({ value, onChange, label, focusColor = "blue" }: { value: number, onChange: (val: number) => void, label: string, focusColor?: string }) => {
@@ -73,6 +76,9 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     onUpdateNeuron,
     onUpdateSynapse,
     synapses,
+    onSelectNodeById,
+    layerChildIds,
+    neuronsRef,
 }) => {
     if (!selectedNode && !selectedEdge) {
         return (
@@ -173,51 +179,77 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                         </div>
                     )}
 
-                    {synapses && (
-                        <div className="flex flex-col gap-4 mt-2">
-                            <div className="flex flex-col gap-2">
-                                <label className="text-xs text-slate-400 uppercase tracking-wider font-semibold border-b border-slate-700 pb-1">Pre-Synaptic (Inputs)</label>
-                                {synapses.filter(s => s.postSynaptic.id === selectedNode.id).length > 0 ? (
-                                    <div className="flex flex-col gap-2 max-h-32 overflow-y-auto pr-1">
-                                        {synapses.filter(s => s.postSynaptic.id === selectedNode.id).map(s => (
-                                            <div key={s.id} className="text-xs bg-slate-900 border border-slate-700 p-2 rounded flex flex-col gap-1">
-                                                <div className="flex justify-between items-center">
-                                                    <span className="text-slate-300 font-medium truncate" title={s.preSynaptic.label}>{s.preSynaptic.label}</span>
-                                                    <span className="text-slate-500 font-mono text-[10px]">W: {s.weight}</span>
-                                                </div>
-                                                <div className="text-[10px] text-slate-500 flex justify-between">
-                                                    <span>{s.sourceHandle ? `Src: ${s.sourceHandle}` : ''}</span>
-                                                    <span>{s.targetHandle ? `Tgt: ${s.targetHandle}` : ''}</span>
-                                                </div>
+                    {selectedNode.type === 'layer' && layerChildIds && neuronsRef && (
+                        <div className="flex flex-col gap-2 mt-2">
+                            <label className="text-xs text-slate-400 uppercase tracking-wider font-semibold border-b border-slate-700 pb-1">Layer Neurons</label>
+                            {layerChildIds.length > 0 ? (
+                                <div className="flex flex-col gap-2 max-h-48 overflow-y-auto pr-1">
+                                    {layerChildIds.map(id => {
+                                        const n = neuronsRef.current.get(id);
+                                        if (!n) return null;
+                                        return (
+                                            <div key={id} onClick={() => onSelectNodeById?.(id)} className="text-xs bg-slate-900 border border-slate-700 p-2 rounded flex justify-between items-center cursor-pointer hover:bg-slate-700 transition-colors">
+                                                <span className="text-slate-300 font-medium truncate" title={n.label}>{n.label}</span>
+                                                <span className="text-slate-500 font-mono text-[10px] capitalize">{n.type}</span>
                                             </div>
-                                        ))}
-                                    </div>
-                                ) : (
-                                    <span className="text-xs text-slate-500 italic">No incoming connections</span>
-                                )}
-                            </div>
+                                        );
+                                    })}
+                                </div>
+                            ) : (
+                                <span className="text-xs text-slate-500 italic">No neurons in this layer</span>
+                            )}
+                        </div>
+                    )}
 
-                            <div className="flex flex-col gap-2 relative">
-                                <label className="text-xs text-slate-400 uppercase tracking-wider font-semibold border-b border-slate-700 pb-1">Post-Synaptic (Outputs)</label>
-                                {synapses.filter(s => s.preSynaptic.id === selectedNode.id).length > 0 ? (
-                                    <div className="flex flex-col gap-2 max-h-32 overflow-y-auto pr-1">
-                                        {synapses.filter(s => s.preSynaptic.id === selectedNode.id).map(s => (
-                                            <div key={s.id} className="text-xs bg-slate-900 border border-slate-700 p-2 rounded flex flex-col gap-1">
-                                                <div className="flex justify-between items-center">
-                                                    <span className="text-slate-300 font-medium truncate" title={s.postSynaptic.label}>{s.postSynaptic.label}</span>
-                                                    <span className="text-slate-500 font-mono text-[10px]">W: {s.weight}</span>
+                    {synapses && selectedNode.type !== 'layer' && (
+                        <div className="flex flex-col gap-4 mt-2">
+                            {selectedNode.type !== 'input' && (
+                                <div className="flex flex-col gap-2">
+                                    <label className="text-xs text-slate-400 uppercase tracking-wider font-semibold border-b border-slate-700 pb-1">Pre-Synaptic (Inputs)</label>
+                                    {synapses.filter(s => s.postSynaptic.id === selectedNode.id).length > 0 ? (
+                                        <div className="flex flex-col gap-2 max-h-32 overflow-y-auto pr-1">
+                                            {synapses.filter(s => s.postSynaptic.id === selectedNode.id).map(s => (
+                                                <div key={s.id} onClick={() => onSelectNodeById?.(s.preSynaptic.id)} className="text-xs bg-slate-900 border border-slate-700 p-2 rounded flex flex-col gap-1 cursor-pointer hover:bg-slate-700 transition-colors">
+                                                    <div className="flex justify-between items-center">
+                                                        <span className="text-slate-300 font-medium truncate" title={s.preSynaptic.label}>{s.preSynaptic.label}</span>
+                                                        <span className="text-slate-500 font-mono text-[10px]">W: {s.weight}</span>
+                                                    </div>
+                                                    <div className="text-[10px] text-slate-500 flex justify-between">
+                                                        <span>{s.sourceHandle ? `Src: ${s.sourceHandle}` : ''}</span>
+                                                        <span>{s.targetHandle ? `Tgt: ${s.targetHandle}` : ''}</span>
+                                                    </div>
                                                 </div>
-                                                <div className="text-[10px] text-slate-500 flex justify-between">
-                                                    <span>{s.sourceHandle ? `Src: ${s.sourceHandle}` : ''}</span>
-                                                    <span>{s.targetHandle ? `Tgt: ${s.targetHandle}` : ''}</span>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <span className="text-xs text-slate-500 italic">No incoming connections</span>
+                                    )}
+                                </div>
+                            )}
+
+                            {selectedNode.type !== 'output' && (
+                                <div className="flex flex-col gap-2 relative">
+                                    <label className="text-xs text-slate-400 uppercase tracking-wider font-semibold border-b border-slate-700 pb-1">Post-Synaptic (Outputs)</label>
+                                    {synapses.filter(s => s.preSynaptic.id === selectedNode.id).length > 0 ? (
+                                        <div className="flex flex-col gap-2 max-h-32 overflow-y-auto pr-1">
+                                            {synapses.filter(s => s.preSynaptic.id === selectedNode.id).map(s => (
+                                                <div key={s.id} onClick={() => onSelectNodeById?.(s.postSynaptic.id)} className="text-xs bg-slate-900 border border-slate-700 p-2 rounded flex flex-col gap-1 cursor-pointer hover:bg-slate-700 transition-colors">
+                                                    <div className="flex justify-between items-center">
+                                                        <span className="text-slate-300 font-medium truncate" title={s.postSynaptic.label}>{s.postSynaptic.label}</span>
+                                                        <span className="text-slate-500 font-mono text-[10px]">W: {s.weight}</span>
+                                                    </div>
+                                                    <div className="text-[10px] text-slate-500 flex justify-between">
+                                                        <span>{s.sourceHandle ? `Src: ${s.sourceHandle}` : ''}</span>
+                                                        <span>{s.targetHandle ? `Tgt: ${s.targetHandle}` : ''}</span>
+                                                    </div>
                                                 </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                ) : (
-                                    <span className="text-xs text-slate-500 italic">No outgoing connections</span>
-                                )}
-                            </div>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <span className="text-xs text-slate-500 italic">No outgoing connections</span>
+                                    )}
+                                </div>
+                            )}
                         </div>
                     )}
                 </div>
@@ -239,7 +271,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                         />
                     </div>
 
-                    {selectedEdge.targetHandle !== 'bias' && selectedEdge.postSynaptic.type !== 'output' && (
+                    {selectedEdge.postSynaptic.type !== 'output' && selectedEdge.postSynaptic.type !== 'pixel-matrix' && (
                         <NumberInput
                             label="Weight"
                             value={selectedEdge.weight}
@@ -248,16 +280,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                         />
                     )}
 
-                    {selectedEdge.targetHandle === 'bias' && (
-                        <div className="flex flex-col gap-1 mt-2 p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
-                            <h3 className="text-sm font-semibold text-yellow-400 mb-1">Sinapse de Limiar</h3>
-                            <p className="text-xs text-slate-400 leading-relaxed">
-                                Esta conexão não suporta peso matemático. O valor na saída do neurônio será transmitido diretamente (1:1) como valor limiar (threshold).
-                            </p>
-                        </div>
-                    )}
-
-                    {selectedEdge.postSynaptic.type === 'output' && (
+                    {(selectedEdge.postSynaptic.type === 'output' || selectedEdge.postSynaptic.type === 'pixel-matrix') && (
                         <div className="flex flex-col gap-1 mt-2 p-3 bg-orange-500/10 border border-orange-500/20 rounded-lg">
                             <h3 className="text-sm font-semibold text-orange-400 mb-1">Conexão de Saída</h3>
                             <p className="text-xs text-slate-400 leading-relaxed">
@@ -265,14 +288,6 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                             </p>
                         </div>
                     )}
-
-                    <div className="flex flex-col gap-1 mt-2">
-                        <label className="text-xs text-slate-400 uppercase tracking-wider font-semibold">Connection Point</label>
-                        <div className="px-3 py-2 bg-slate-900 border border-slate-700 rounded text-xs text-slate-400 flex flex-col gap-1">
-                            <span>{`Pre : ${selectedEdge.preSynaptic.label} ${selectedEdge.sourceHandle ? `(${selectedEdge.sourceHandle})` : ''}`}</span>
-                            <span>{`Post: ${selectedEdge.postSynaptic.label} ${selectedEdge.targetHandle ? `(${selectedEdge.targetHandle})` : ''}`}</span>
-                        </div>
-                    </div>
                 </div>
             )}
         </aside>

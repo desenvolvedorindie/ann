@@ -23,7 +23,7 @@ import '@xyflow/react/dist/style.css';
 import { Sidebar } from './Sidebar';
 import { NeuronNode } from './NeuronNode';
 import type { NeuronNodeData } from './NeuronNode';
-import { InputNeuron, McCullochPitts, OutputNeuron, PixelMatrix, Synapse, NeuralLayer } from '../models/neural';
+import { InputNeuron, BiasNeuron, McCullochPitts, OutputNeuron, PixelMatrix, Synapse, NeuralLayer } from '../models/neural';
 import type { NeuronType, INeuron, ISynapse } from '../models/neural';
 import { PixelMatrixNode, type PixelMatrixNodeData } from './PixelMatrixNode';
 import { LayerNode, type LayerNodeData } from './LayerNode';
@@ -45,6 +45,7 @@ const nodeTypes = {
 
 export type NetworkCanvasRef = {
     alignNodes: (alignment: 'vertical-center' | 'horizontal-center' | 'distribute-vertical' | 'distribute-horizontal', selectedIds: string[]) => void;
+    selectNode: (id: string | null) => void;
 };
 
 export interface HistoryState {
@@ -59,7 +60,7 @@ export interface HistoryState {
 }
 
 interface FlowProps {
-    onSelectNode: (neuron: INeuron | null) => void;
+    onSelectNode: (neuron: INeuron | null, layerChildIds?: string[]) => void;
     onSelectEdge: (synapse: ISynapse | null) => void;
     onSelectedNodesChange: (nodeIds: string[]) => void;
     onHistoryChange: (history: HistoryState) => void;
@@ -70,7 +71,7 @@ interface FlowProps {
     showMatrixHandles: boolean;
     toolMode: 'pan' | 'select';
     onSetToolMode: (mode: 'pan' | 'select') => void;
-    workspace: 'database' | 'architecture' | 'training' | 'execution';
+    workspace: 'data' | 'architecture' | 'training' | 'execution';
 }
 
 const Flow = forwardRef<NetworkCanvasRef, FlowProps>(({ onSelectNode, onSelectEdge, onSelectedNodesChange, onHistoryChange, neuronsRef, synapsesRef, tick, showRawConnections, showMatrixHandles, toolMode, onSetToolMode, workspace }, ref) => {
@@ -192,40 +193,68 @@ const Flow = forwardRef<NetworkCanvasRef, FlowProps>(({ onSelectNode, onSelectEd
                                 let fullyConnected = true;
                                 const currentPairEdges: string[] = [];
 
-                                // Discover if this pair is fully connected
-                                for (let sIdx = 0; sIdx < srcChildren.length; sIdx++) {
-                                    const srcNode = srcChildren[sIdx];
+                                // Flatten for virtual topology check
+                                const flattenedSources: { node: Node, handleId: string | undefined, neuron: INeuron }[] = [];
+                                srcChildren.forEach(srcNode => {
                                     const srcNeuron = neuronsRef.current.get(srcNode.id);
-                                    if (!srcNeuron) continue;
+                                    if (!srcNeuron) return;
+                                    if (srcNeuron.type === 'pixel-matrix') {
+                                        const matrix = srcNeuron as PixelMatrix;
+                                        const totalPixels = matrix.width * matrix.height;
+                                        for (let i = 0; i < totalPixels; i++) {
+                                            flattenedSources.push({ node: srcNode, handleId: `pixel-${i}`, neuron: srcNeuron });
+                                        }
+                                    } else {
+                                        flattenedSources.push({ node: srcNode, handleId: undefined, neuron: srcNeuron });
+                                    }
+                                });
 
-                                    for (let tIdx = 0; tIdx < tgtChildren.length; tIdx++) {
-                                        const tgtNode = tgtChildren[tIdx];
-                                        const tgtNeuron = neuronsRef.current.get(tgtNode.id);
-                                        if (!tgtNeuron) continue;
+                                const flattenedTargets: { node: Node, handleId: string | undefined, neuron: INeuron }[] = [];
+                                tgtChildren.forEach(tgtNode => {
+                                    const tgtNeuron = neuronsRef.current.get(tgtNode.id);
+                                    if (!tgtNeuron) return;
+                                    if (tgtNeuron.type === 'pixel-matrix') {
+                                        const matrix = tgtNeuron as PixelMatrix;
+                                        const totalPixels = matrix.width * matrix.height;
+                                        for (let i = 0; i < totalPixels; i++) {
+                                            flattenedTargets.push({ node: tgtNode, handleId: `pixel-in-${i}`, neuron: tgtNeuron });
+                                        }
+                                    } else {
+                                        flattenedTargets.push({ node: tgtNode, handleId: undefined, neuron: tgtNeuron });
+                                    }
+                                });
 
-                                        if (tgtNeuron.type === 'output' && sIdx !== tIdx) continue;
-                                        if (srcNeuron.type === 'pixel-matrix') {
-                                            const matrix = srcNeuron as PixelMatrix;
-                                            const totalPixels = matrix.width * matrix.height;
-                                            for (let p = 0; p < totalPixels; p++) {
-                                                const handleId = `pixel-${p}`;
-                                                const matchingEdge = eds.find(e => e.source === srcNode.id && e.target === tgtNode.id && e.sourceHandle === handleId);
-                                                if (!matchingEdge) {
-                                                    fullyConnected = false;
-                                                    break;
-                                                } else {
-                                                    currentPairEdges.push(matchingEdge.id);
-                                                }
-                                            }
-                                            if (!fullyConnected) break;
+                                const validSources = flattenedSources.filter(s => s.neuron.type !== 'input');
+                                const validTargets = flattenedTargets.filter(t => t.neuron.type !== 'input' && t.neuron.type !== 'bias');
+
+                                // Discover if this pair is fully connected
+                                for (let sIdx = 0; sIdx < validSources.length; sIdx++) {
+                                    const { node: srcNode, handleId: srcHandleId, neuron: srcNeuronActual } = validSources[sIdx];
+
+                                    for (let tIdx = 0; tIdx < validTargets.length; tIdx++) {
+                                        const { node: tgtNode, handleId: tgtHandleId, neuron: tgtNeuron } = validTargets[tIdx];
+
+                                        // 1:1 mapping enforce
+                                        if ((tgtNeuron.type === 'output' || tgtNeuron.type === 'pixel-matrix') && sIdx !== tIdx) continue;
+
+                                        let targetHandle = 'input';
+                                        if (tgtNeuron.type === 'pixel-matrix') {
+                                            targetHandle = tgtHandleId || 'pixel-in-0';
+                                        } else if (srcNeuronActual.type === 'bias') {
+                                            targetHandle = 'bias';
+                                        }
+
+                                        const matchingEdge = eds.find(e =>
+                                            e.source === srcNode.id && e.target === tgtNode.id &&
+                                            (e.sourceHandle === srcHandleId || (!e.sourceHandle && !srcHandleId)) &&
+                                            (e.targetHandle === targetHandle)
+                                        );
+
+                                        if (!matchingEdge) {
+                                            fullyConnected = false;
+                                            break;
                                         } else {
-                                            const matchingEdge = eds.find(e => e.source === srcNode.id && e.target === tgtNode.id && e.targetHandle !== 'bias');
-                                            if (!matchingEdge) {
-                                                fullyConnected = false;
-                                                break;
-                                            } else {
-                                                currentPairEdges.push(matchingEdge.id);
-                                            }
+                                            currentPairEdges.push(matchingEdge.id);
                                         }
                                     }
                                     if (!fullyConnected) break;
@@ -272,23 +301,40 @@ const Flow = forwardRef<NetworkCanvasRef, FlowProps>(({ onSelectNode, onSelectEd
 
                     const synapse = synapsesRef.current.get(e.id);
                     if (synapse) {
-                        const isBias = e.targetHandle === 'bias';
-                        const isOutputEdge = synapse.postSynaptic.type === 'output';
-                        const color = isBias ? '#eab308' : (isOutputEdge ? '#f97316' : '#60a5fa');
-                        const showLabel = !isBias && !isOutputEdge;
+                        // Uma edge apenas deve ser laranja e tracejada se estiver efetivamente
+                        // conectando para um nó que seja de Output E estiver fora da camada atual,
+                        // mas a regra atual "postSynaptic.type === 'output'" já funciona para a semântica,
+                        // exceto que dentro da macro da camada, não existe nó output de "destino" intermediário
+                        // O problema é que qualquer sinapse que VAI para um output neuron fica tracejada.
+                        // Correção: Apenas tracejar se o edge visível está indo para um nó Neuron de Output.
+                        const targetNode = currentNodes.find(n => n.id === e.target);
+                        const targetType = targetNode?.type === 'neuron' ? (targetNode.data as any).neuron?.type : targetNode?.type;
+                        const isOutputEdge = targetType === 'output' || targetType === 'pixel-matrix' || targetNode?.type === 'pixel-matrix';
+                        const isBiasEdge = e.targetHandle === 'bias';
+
+                        const isSelected = !!e.selected;
+                        const baseColor = isOutputEdge ? '#f97316' : (isBiasEdge ? '#eab308' : '#60a5fa');
+                        const color = isSelected ? '#ffffff' : baseColor;
+                        const showLabel = !isOutputEdge;
                         return {
                             ...e,
                             hidden: false,
                             type: 'straight',
-                            interactionWidth: 0,
-                            focusable: false,
+                            selectable: true,
+                            focusable: true,
+                            interactionWidth: 12,
                             label: showLabel ? synapse.weight.toString() : undefined,
-                            labelStyle: showLabel ? { fill: color, fontWeight: 'bold' } : undefined,
-                            labelBgStyle: showLabel ? { fill: '#1e293b', opacity: 0.8 } : undefined,
+                            labelStyle: showLabel ? { fill: isSelected ? '#ffffff' : baseColor, fontWeight: 'bold' } : undefined,
+                            labelBgStyle: showLabel ? { fill: isSelected ? '#334155' : '#1e293b', opacity: 0.9 } : undefined,
                             labelBgPadding: showLabel ? [4, 4] : undefined,
                             labelBgBorderRadius: showLabel ? 4 : undefined,
-                            style: { stroke: color, strokeWidth: 2, strokeDasharray: isOutputEdge ? '5,5' : undefined },
-                            zIndex: showMatrixHandles ? 100 : -10,
+                            style: {
+                                stroke: color,
+                                strokeWidth: isSelected ? 3 : 2,
+                                strokeDasharray: isOutputEdge ? '5,5' : undefined,
+                                filter: isSelected ? `drop-shadow(0 0 6px ${baseColor})` : undefined,
+                            },
+                            zIndex: isSelected ? 200 : (showMatrixHandles ? 100 : -10),
                             markerEnd: { type: MarkerType.ArrowClosed, color: color }
                         };
                     }
@@ -389,22 +435,48 @@ const Flow = forwardRef<NetworkCanvasRef, FlowProps>(({ onSelectNode, onSelectEd
                     }
                 });
 
-                targetLayerChildren.forEach((tgtNode, tgtIndex) => {
+                // Flatten target neurons so PixelMatrix acts as N independent targets
+                const flattenedTargets: { node: Node, handleId: string | undefined, neuron: INeuron }[] = [];
+                targetLayerChildren.forEach(tgtNode => {
                     const tgtNeuron = neuronsRef.current.get(tgtNode.id);
                     if (!tgtNeuron) return;
+                    if (tgtNeuron.type === 'pixel-matrix') {
+                        const matrix = tgtNeuron as PixelMatrix;
+                        const totalPixels = matrix.width * matrix.height;
+                        for (let i = 0; i < totalPixels; i++) {
+                            flattenedTargets.push({ node: tgtNode, handleId: `pixel-in-${i}`, neuron: tgtNeuron });
+                        }
+                    } else {
+                        flattenedTargets.push({ node: tgtNode, handleId: undefined, neuron: tgtNeuron });
+                    }
+                });
 
-                    flattenedSources.forEach((srcPoint, srcFlatIndex) => {
-                        // Se o neurônio da camada alvo for do tipo 'output', as conexões devem ser 1:1 exato com a source achatada
-                        if (tgtNeuron.type === 'output' && srcFlatIndex !== tgtIndex) {
+                const validSources = flattenedSources.filter(s => s.neuron.type !== 'input');
+                const validTargets = flattenedTargets.filter(t => t.neuron.type !== 'input' && t.neuron.type !== 'bias');
+
+                validTargets.forEach((tgtPoint, tIdx) => {
+                    const { node: tgtNode, handleId: tgtHandleId, neuron: tgtNeuron } = tgtPoint;
+
+                    validSources.forEach((srcPoint, sIdx) => {
+                        // Se o neurônio da camada alvo for do tipo 'output' ou um pixel da 'pixel-matrix', as conexões devem ser 1:1 exato com a source achatada
+                        if ((tgtNeuron.type === 'output' || tgtNeuron.type === 'pixel-matrix') && sIdx !== tIdx) {
                             return;
                         }
 
-                        const { node: srcNode, handleId, neuron: srcNeuron } = srcPoint;
+                        const { node: srcNode, handleId: srcHandleId, neuron: srcNeuronActual } = srcPoint;
+
+                        // Determinar o handle alvo correto com base no tipo do neurônio alvo
+                        let targetHandle = 'input';
+                        if (tgtNeuron.type === 'pixel-matrix') {
+                            targetHandle = tgtHandleId || 'pixel-in-0';
+                        } else if (srcNeuronActual.type === 'bias') {
+                            targetHandle = 'bias';
+                        }
 
                         // Check if connection already exists
                         let connectionExists = false;
                         synapsesRef.current.forEach(sym => {
-                            if (sym.preSynaptic.id === srcNeuron.id && sym.postSynaptic.id === tgtNeuron.id && sym.sourceHandle === (handleId || undefined)) {
+                            if (sym.preSynaptic.id === srcNeuronActual.id && sym.postSynaptic.id === tgtNeuron.id && sym.sourceHandle === (srcHandleId || undefined) && sym.targetHandle === targetHandle) {
                                 connectionExists = true;
                             }
                         });
@@ -415,19 +487,21 @@ const Flow = forwardRef<NetworkCanvasRef, FlowProps>(({ onSelectNode, onSelectEd
                                 if (alreadyConnected) return;
                             }
 
-                            const synapse = new Synapse(srcNeuron, tgtNeuron, 1, handleId, 'input');
+                            const synapse = new Synapse(srcNeuronActual, tgtNeuron, 1, srcHandleId, targetHandle);
                             newSynapses.set(synapse.id, synapse);
 
-                            const isOutputEdge = tgtNeuron.type === 'output';
-                            const color = isOutputEdge ? '#f97316' : '#60a5fa';
+                            const isOutputEdge = tgtNeuron.type === 'output' || tgtNeuron.type === 'pixel-matrix';
+                            const isBiasEdge = targetHandle === 'bias';
+                            const baseColor = isOutputEdge ? '#f97316' : (isBiasEdge ? '#eab308' : '#60a5fa');
+                            const color = isOutputEdge ? '#f97316' : baseColor;
                             const showLabel = !isOutputEdge;
 
                             newEdges.push({
                                 id: synapse.id,
                                 source: srcNode.id,
-                                sourceHandle: handleId || null,
+                                sourceHandle: srcHandleId || null,
                                 target: tgtNode.id,
-                                targetHandle: 'input',
+                                targetHandle: targetHandle,
                                 label: showLabel ? '1' : undefined,
                                 labelStyle: showLabel ? { fill: color, fontWeight: 'bold' } : undefined,
                                 labelBgStyle: showLabel ? { fill: '#1e293b', opacity: 0.8 } : undefined,
@@ -462,10 +536,11 @@ const Flow = forwardRef<NetworkCanvasRef, FlowProps>(({ onSelectNode, onSelectEd
                 const newSynapses = new Map<string, ISynapse>();
                 newSynapses.set(synapse.id, synapse);
 
-                const isBias = params.targetHandle === 'bias';
-                const isOutputEdge = postNeuron.type === 'output';
-                const color = isBias ? '#eab308' : (isOutputEdge ? '#f97316' : '#60a5fa');
-                const showLabel = !isBias && !isOutputEdge;
+                const isOutputEdge = postNeuron.type === 'output' || postNeuron.type === 'pixel-matrix';
+                const isBiasEdge = params.targetHandle === 'bias';
+                const baseColor = isOutputEdge ? '#f97316' : (isBiasEdge ? '#eab308' : '#60a5fa');
+                const color = isOutputEdge ? '#f97316' : baseColor;
+                const showLabel = !isOutputEdge;
 
                 const newEdge: Edge = {
                     id: synapse.id,
@@ -497,6 +572,63 @@ const Flow = forwardRef<NetworkCanvasRef, FlowProps>(({ onSelectNode, onSelectEd
         event.dataTransfer.dropEffect = 'move';
     }, []);
 
+    const onPaneClick = useCallback((e: React.MouseEvent) => {
+        if (e.button === 1) {
+            onSetToolMode('pan');
+        }
+    }, [onSetToolMode]);
+
+    const isValidConnection = useCallback((connection: Edge | Connection) => {
+        if (workspace !== 'architecture') return false;
+
+        const sourceNode = nodes.find(n => n.id === connection.source);
+        const targetNode = nodes.find(n => n.id === connection.target);
+
+        const sourceIsLayer = sourceNode?.type === 'layerNode';
+        const targetIsLayer = targetNode?.type === 'layerNode';
+
+        // Layer connections are only valid layer-out → layer-in
+        if (sourceIsLayer || targetIsLayer) {
+            if (!(sourceIsLayer && targetIsLayer &&
+                connection.sourceHandle === 'layer-out' &&
+                connection.targetHandle === 'layer-in')) {
+                return false;
+            }
+        }
+
+        const sourceType = (sourceNode?.data as any)?.neuron?.type;
+
+        // The 'bias' handle on M-P neurons only accepts BiasNeuron sources
+        if (connection.targetHandle === 'bias') {
+            if (sourceType !== 'bias') return false;
+        }
+
+        // Bias neurons cannot connect to standard 'input' handles
+        if (sourceType === 'bias' && connection.targetHandle === 'input') {
+            return false;
+        }
+
+        // Accept inward connections for Pixel Matrix
+        const targetType = (targetNode?.data as any)?.neuron?.type;
+        if (targetType === 'pixel-matrix') {
+            if (!connection.targetHandle?.startsWith('pixel-in-')) return false;
+        }
+
+        // Output neuron only accepts one connection
+        if (targetNode && (targetNode.data as any)?.neuron?.type === 'output') {
+            const hasExisting = edges.some(e => e.target === connection.target);
+            if (hasExisting) return false;
+        }
+
+        if (connection.source === connection.target) return false;
+        return true;
+    }, [workspace, nodes, edges]);
+
+    const onMultiDropClose = useCallback(() => {
+        setIsMultiDropOpen(false);
+        setPendingDrop(null);
+    }, []);
+
     const instantiateNode = useCallback((type: NeuronType, position: { x: number, y: number }): { node: Node<NeuralNodeData>, neuron: INeuron } => {
         if (type === 'layer') {
             const newLayer = new NeuralLayer('Camada');
@@ -517,6 +649,8 @@ const Flow = forwardRef<NetworkCanvasRef, FlowProps>(({ onSelectNode, onSelectEd
         let newNeuronObj: INeuron;
         if (type === 'input') {
             newNeuronObj = new InputNeuron('Input Neuron');
+        } else if (type === 'bias') {
+            newNeuronObj = new BiasNeuron('Bias');
         } else if (type === 'output') {
             newNeuronObj = new OutputNeuron('Output Neuron');
         } else if (type === 'pixel-matrix') {
@@ -545,10 +679,17 @@ const Flow = forwardRef<NetworkCanvasRef, FlowProps>(({ onSelectNode, onSelectEd
         const newNeurons = new Map<string, INeuron>();
         const { type, position } = pendingDrop;
 
-        const yOffset = type === 'pixel-matrix' ? 160 : 100;
+        let xOffset = 0;
+        let yOffset = 0;
+
+        if (type === 'layer') {
+            xOffset = 300; // Drop layers horizontally
+        } else {
+            yOffset = type === 'pixel-matrix' ? 160 : 100; // Drop neurons vertically
+        }
 
         for (let i = 0; i < count; i++) {
-            const pos = { x: position.x, y: position.y + (i * yOffset) };
+            const pos = { x: position.x + (i * xOffset), y: position.y + (i * yOffset) };
             const { node, neuron } = instantiateNode(type, pos);
             newNodes.push(node);
             newNeurons.set(neuron.id, neuron);
@@ -600,8 +741,9 @@ const Flow = forwardRef<NetworkCanvasRef, FlowProps>(({ onSelectNode, onSelectEd
             // Don't show properties if it's just a layer wrapper
             if (selectedNode.type === 'layerNode') {
                 const layerObj = (selectedNode.data as LayerNodeData).layer;
+                const childIds = nodesRef.current.filter(n => n.parentId === selectedNode.id).map(n => n.id);
                 // Cast to INeuron for the app state, PropertiesPanel will handle the 'layer' type
-                onSelectNode(layerObj as unknown as INeuron);
+                onSelectNode(layerObj as unknown as INeuron, childIds);
             } else {
                 const neuronObj = neuronsRef.current.get(selectedNode.id) || null;
                 onSelectNode(neuronObj);
@@ -716,19 +858,22 @@ const Flow = forwardRef<NetworkCanvasRef, FlowProps>(({ onSelectNode, onSelectEd
                 }
             });
 
-            // Reorganize all affected layers
+            // Reorganize all affected layers and recalculate their size
             layersToReorganize.forEach(layerId => {
-                const layerNode = nextNodes.find(n => n.id === layerId);
+                const layerNodeIndex = nextNodes.findIndex(n => n.id === layerId);
+                const layerNode = nextNodes[layerNodeIndex];
                 if (!layerNode) return;
 
                 const children = nextNodes.filter(n => n.parentId === layerId);
                 children.sort((a, b) => a.position.y - b.position.y);
 
-                const startY = 50;
-                const gap = 10;
+                const startY = 40;
+                const gap = 15;
                 const dropX = 30;
 
                 let currentY = startY;
+                let maxChildWidth = 0;
+
                 children.forEach((child) => {
                     const childIndex = nextNodes.findIndex(n => n.id === child.id);
                     if (childIndex > -1) {
@@ -736,19 +881,32 @@ const Flow = forwardRef<NetworkCanvasRef, FlowProps>(({ onSelectNode, onSelectEd
                             ...nextNodes[childIndex],
                             position: { x: dropX, y: currentY }
                         };
-                        const childHeight = nextNodes[childIndex].measured?.height || 80;
+                        const childHeight = (nextNodes[childIndex].measured?.height) || (nextNodes[childIndex].style?.height as number) || 80;
+                        const childWidth = (nextNodes[childIndex].measured?.width) || (nextNodes[childIndex].style?.width as number) || 150;
                         currentY += childHeight + gap;
+
+                        if (childWidth > maxChildWidth) {
+                            maxChildWidth = childWidth;
+                        }
                     }
                 });
 
-                const layerIndex = nextNodes.findIndex(n => n.id === layerId);
-                if (layerIndex > -1 && children.length > 0) {
-                    const requiredHeight = Math.max(180, currentY + 20);
-                    nextNodes[layerIndex] = {
-                        ...nextNodes[layerIndex],
-                        style: { ...nextNodes[layerIndex].style, width: 240, height: requiredHeight }
-                    };
-                }
+                // Calculate required layer dimensions and pad
+                const minLayerHeight = 180;
+                const minLayerWidth = 240;
+
+                const neededHeight = Math.max(minLayerHeight, currentY + 20);
+                const neededWidth = Math.max(minLayerWidth, maxChildWidth + 60);
+
+                // Update layer size to fit its children
+                nextNodes[layerNodeIndex] = {
+                    ...layerNode,
+                    style: {
+                        ...layerNode.style,
+                        width: neededWidth,
+                        height: neededHeight
+                    }
+                };
             });
 
             // Ensure parent nodes come BEFORE children in array (React Flow requirement)
@@ -799,6 +957,18 @@ const Flow = forwardRef<NetworkCanvasRef, FlowProps>(({ onSelectNode, onSelectEd
     }, [processDroppedNodes, pushMoveCommand]);
 
     useImperativeHandle(ref, () => ({
+        selectNode: (id: string | null) => {
+            if (!id) {
+                setNodes(nds => nds.map(n => ({ ...n, selected: false })));
+                setEdges(eds => eds.map(e => ({ ...e, selected: false })));
+            } else {
+                setNodes(nds => nds.map(n => ({ ...n, selected: n.id === id })));
+                setEdges(eds => eds.map(e => ({ ...e, selected: false })));
+
+                // Keep the canvas focused so that keyboard shortcuts keep working immediately
+                setTimeout(() => reactFlowWrapper.current?.focus(), 50);
+            }
+        },
         alignNodes: (alignment: 'vertical-center' | 'horizontal-center' | 'distribute-vertical' | 'distribute-horizontal', selectedIds: string[]) => {
             if (selectedIds.length < 2) return;
 
@@ -904,28 +1074,7 @@ const Flow = forwardRef<NetworkCanvasRef, FlowProps>(({ onSelectNode, onSelectEd
                     onNodeDragStop={workspace === 'architecture' ? onNodeDragStop : undefined}
                     onSelectionDragStop={workspace === 'architecture' ? onSelectionDragStop : undefined}
                     onSelectionChange={onSelectionChange}
-                    isValidConnection={(connection) => {
-                        if (workspace !== 'architecture') return false;
-                        console.log('Validating connection payload:', connection);
-                        // Output neuron only accepts 1 connection
-                        const targetNode = nodes.find(n => n.id === connection.target);
-                        if (targetNode && (targetNode.data as any)?.neuron?.type === 'output') {
-                            const hasExisting = edges.some(e => e.target === connection.target);
-                            if (hasExisting) {
-                                console.log('Rejected: Output neuron already has connection');
-                                return false;
-                            }
-                        }
-
-                        // Check if pixel matrix tries to connect to itself (invalid)
-                        if (connection.source === connection.target) {
-                            console.log('Rejected: Connect to self');
-                            return false;
-                        }
-
-                        console.log('Connection accepted');
-                        return true;
-                    }}
+                    isValidConnection={isValidConnection}
                     nodeTypes={nodeTypes as any}
                     defaultEdgeOptions={{
                         type: 'straight', // straight edge instead of bezier curve
@@ -935,6 +1084,7 @@ const Flow = forwardRef<NetworkCanvasRef, FlowProps>(({ onSelectNode, onSelectEd
                     }}
                     deleteKeyCode={workspace === 'architecture' ? ['Backspace', 'Delete'] : null}
                     multiSelectionKeyCode="Shift"
+                    selectionKeyCode={null}
                     fitView
                     nodesDraggable={workspace === 'architecture'}
                     nodesConnectable={workspace === 'architecture'}
@@ -946,12 +1096,7 @@ const Flow = forwardRef<NetworkCanvasRef, FlowProps>(({ onSelectNode, onSelectEd
                     proOptions={{ hideAttribution: true }}
                     onlyRenderVisibleElements={true}
                     className="bg-slate-900"
-                    onPaneClick={(e) => {
-                        // In some browsers middle click triggers this, but we'll also use global listener
-                        if (e.button === 1) {
-                            onSetToolMode('pan');
-                        }
-                    }}
+                    onPaneClick={onPaneClick}
                 >
                     <Background
                         color="#334155"
@@ -985,10 +1130,7 @@ const Flow = forwardRef<NetworkCanvasRef, FlowProps>(({ onSelectNode, onSelectEd
             <MultiDropModal
                 isOpen={isMultiDropOpen}
                 nodeType={pendingDrop?.type || null}
-                onClose={() => {
-                    setIsMultiDropOpen(false);
-                    setPendingDrop(null);
-                }}
+                onClose={onMultiDropClose}
                 onConfirm={handleMultiDropConfirm}
             />
         </div>
@@ -996,7 +1138,7 @@ const Flow = forwardRef<NetworkCanvasRef, FlowProps>(({ onSelectNode, onSelectEd
 });
 
 export interface NetworkCanvasProps {
-    onSelectNode: (neuron: INeuron | null) => void;
+    onSelectNode: (neuron: INeuron | null, layerChildIds?: string[]) => void;
     onSelectEdge: (synapse: ISynapse | null) => void;
     onSelectedNodesChange: (nodeIds: string[]) => void;
     onHistoryChange: (history: HistoryState) => void;
@@ -1007,7 +1149,7 @@ export interface NetworkCanvasProps {
     showMatrixHandles: boolean;
     toolMode: 'pan' | 'select';
     onSetToolMode: (mode: 'pan' | 'select') => void;
-    workspace: 'database' | 'architecture' | 'training' | 'execution';
+    workspace: 'data' | 'architecture' | 'training' | 'execution';
 }
 
 export const NetworkCanvas = forwardRef<NetworkCanvasRef, NetworkCanvasProps>((props, ref) => {

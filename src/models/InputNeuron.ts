@@ -12,6 +12,10 @@ export class InputNeuron implements INeuron {
         this.label = label;
     }
 
+    get size(): number {
+        return 1;
+    }
+
     // Input neurons don't calculate output from incoming synapses; their output is set externally.
     // The interface requires this method, but it won't use the incomingSynapses parameter.
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
