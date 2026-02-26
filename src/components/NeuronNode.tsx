@@ -2,7 +2,7 @@ import React from 'react';
 import { Handle, Position, useReactFlow, type NodeProps, type Node } from '@xyflow/react';
 import { Network, X } from 'lucide-react';
 import clsx from 'clsx';
-import type { INeuron } from '../models/neural';
+import type { INeuron, McCullochPitts } from '../models/neural';
 
 // Create a type that adds Record<string, unknown> to satisfy React Flow Node requirements while still holding INeuron
 export type NeuronNodeData = Record<string, unknown> & {
@@ -104,18 +104,18 @@ export const NeuronNode: React.FC<NodeProps<Node<NeuronNodeData>>> = ({ id, data
                                 Limiar
                             </span>
                             <span className="text-[10px] font-mono font-bold text-orange-400 leading-none">
-                                {neuron.bias.toFixed(2)}
+                                {(neuron as McCullochPitts).bias?.toFixed(2) ?? '0.00'}
                             </span>
                         </div>
                     )}
 
-                    {!isInput && neuron.netInput !== undefined && (
+                    {!isInput && (neuron as McCullochPitts).netInput !== undefined && (
                         <div className={clsx("flex flex-col", isMP ? "flex-1 border-r border-slate-700/50 pr-2" : "")}>
                             <span className="text-[7px] uppercase tracking-wider text-slate-400 font-bold leading-tight">
                                 Soma
                             </span>
                             <span className="text-[10px] font-mono font-bold text-yellow-400 leading-none">
-                                {neuron.netInput.toFixed(2)}
+                                {(neuron as McCullochPitts).netInput?.toFixed(2) ?? '0.00'}
                             </span>
                         </div>
                     )}

@@ -6,6 +6,7 @@ interface PropertiesPanelProps {
     selectedEdge: ISynapse | null;
     onUpdateNeuron: (id: string, updates: NeuronPartialUpdate) => void;
     onUpdateSynapse: (id: string, updates: Partial<ISynapse>) => void;
+    synapses?: ISynapse[];
 }
 
 const NumberInput = ({ value, onChange, label, focusColor = "blue" }: { value: number, onChange: (val: number) => void, label: string, focusColor?: string }) => {
@@ -71,10 +72,11 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     selectedEdge,
     onUpdateNeuron,
     onUpdateSynapse,
+    synapses,
 }) => {
     if (!selectedNode && !selectedEdge) {
         return (
-            <aside className="w-72 bg-slate-800 text-slate-100 p-6 flex flex-col gap-4 border-l border-slate-700 shadow-xl z-10 shrink-0">
+            <aside className="w-72 bg-slate-800 text-slate-100 p-6 flex flex-col gap-4 border-l border-slate-700 shadow-xl z-10 shrink-0 flex-1 overflow-y-auto overflow-x-hidden">
                 <h2 className="text-xl font-bold text-slate-200">Properties</h2>
                 <div className="text-sm text-slate-400 mt-10 text-center italic">
                     Select a neuron or connection to view its properties.
@@ -84,7 +86,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     }
 
     return (
-        <aside className="w-72 bg-slate-800 text-slate-100 p-6 flex flex-col gap-6 border-l border-slate-700 shadow-xl z-10 shrink-0 overflow-y-auto">
+        <aside className="w-72 bg-slate-800 text-slate-100 p-6 flex flex-col gap-6 border-l border-slate-700 shadow-xl z-10 shrink-0 flex-1 overflow-y-auto overflow-x-hidden">
             <h2 className="text-xl font-bold text-slate-200 border-b border-slate-700 pb-2">Properties</h2>
 
             {selectedNode && (
@@ -162,11 +164,59 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                         </div>
                     )}
 
-                    {selectedNode.type !== 'input' && selectedNode.type !== 'pixel-matrix' && (
+                    {selectedNode.type !== 'input' && selectedNode.type !== 'pixel-matrix' && selectedNode.type !== 'layer' && (
                         <div className="flex flex-col gap-1 mt-2">
                             <label className="text-xs text-slate-400 uppercase tracking-wider font-semibold">Current Output</label>
                             <div className="px-3 py-2 bg-slate-900 border border-slate-700 rounded text-sm text-slate-300 font-mono">
                                 {typeof selectedNode.output === 'number' ? selectedNode.output : 'Array(Batched)'}
+                            </div>
+                        </div>
+                    )}
+
+                    {synapses && (
+                        <div className="flex flex-col gap-4 mt-2">
+                            <div className="flex flex-col gap-2">
+                                <label className="text-xs text-slate-400 uppercase tracking-wider font-semibold border-b border-slate-700 pb-1">Pre-Synaptic (Inputs)</label>
+                                {synapses.filter(s => s.postSynaptic.id === selectedNode.id).length > 0 ? (
+                                    <div className="flex flex-col gap-2 max-h-32 overflow-y-auto pr-1">
+                                        {synapses.filter(s => s.postSynaptic.id === selectedNode.id).map(s => (
+                                            <div key={s.id} className="text-xs bg-slate-900 border border-slate-700 p-2 rounded flex flex-col gap-1">
+                                                <div className="flex justify-between items-center">
+                                                    <span className="text-slate-300 font-medium truncate" title={s.preSynaptic.label}>{s.preSynaptic.label}</span>
+                                                    <span className="text-slate-500 font-mono text-[10px]">W: {s.weight}</span>
+                                                </div>
+                                                <div className="text-[10px] text-slate-500 flex justify-between">
+                                                    <span>{s.sourceHandle ? `Src: ${s.sourceHandle}` : ''}</span>
+                                                    <span>{s.targetHandle ? `Tgt: ${s.targetHandle}` : ''}</span>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <span className="text-xs text-slate-500 italic">No incoming connections</span>
+                                )}
+                            </div>
+
+                            <div className="flex flex-col gap-2 relative">
+                                <label className="text-xs text-slate-400 uppercase tracking-wider font-semibold border-b border-slate-700 pb-1">Post-Synaptic (Outputs)</label>
+                                {synapses.filter(s => s.preSynaptic.id === selectedNode.id).length > 0 ? (
+                                    <div className="flex flex-col gap-2 max-h-32 overflow-y-auto pr-1">
+                                        {synapses.filter(s => s.preSynaptic.id === selectedNode.id).map(s => (
+                                            <div key={s.id} className="text-xs bg-slate-900 border border-slate-700 p-2 rounded flex flex-col gap-1">
+                                                <div className="flex justify-between items-center">
+                                                    <span className="text-slate-300 font-medium truncate" title={s.postSynaptic.label}>{s.postSynaptic.label}</span>
+                                                    <span className="text-slate-500 font-mono text-[10px]">W: {s.weight}</span>
+                                                </div>
+                                                <div className="text-[10px] text-slate-500 flex justify-between">
+                                                    <span>{s.sourceHandle ? `Src: ${s.sourceHandle}` : ''}</span>
+                                                    <span>{s.targetHandle ? `Tgt: ${s.targetHandle}` : ''}</span>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <span className="text-xs text-slate-500 italic">No outgoing connections</span>
+                                )}
                             </div>
                         </div>
                     )}

@@ -1,0 +1,36 @@
+import type { Edge } from '@xyflow/react';
+import type { ISynapse } from '../models/neural';
+import type { CommandContext, ICommand } from './types';
+
+// ─── Delete Edge(s) ────────────────────────────────────────────────────────
+export class DeleteEdgesCommand implements ICommand {
+    label: string;
+    private ctx: CommandContext;
+    private deletedEdges: Edge[] = [];
+    private deletedSynapses: Map<string, ISynapse> = new Map();
+
+    constructor(ctx: CommandContext, edgeIds: string[]) {
+        this.ctx = ctx;
+        this.label = `Desconectar ${edgeIds.length} sinapse(s)`;
+
+        const edgeIdSet = new Set(edgeIds);
+        const currentEdges = ctx.getEdges();
+
+        this.deletedEdges = currentEdges.filter(e => edgeIdSet.has(e.id)).map(e => ({ ...e }));
+        this.deletedEdges.forEach(e => {
+            const syn = ctx.synapsesRef.current.get(e.id);
+            if (syn) this.deletedSynapses.set(e.id, syn);
+        });
+    }
+
+    execute(): void {
+        const edgeIds = new Set(this.deletedEdges.map(e => e.id));
+        this.deletedSynapses.forEach((_, id) => this.ctx.synapsesRef.current.delete(id));
+        this.ctx.setEdges(eds => eds.filter(e => !edgeIds.has(e.id)));
+    }
+
+    undo(): void {
+        this.deletedSynapses.forEach((syn, id) => this.ctx.synapsesRef.current.set(id, syn));
+        this.ctx.setEdges(eds => [...eds, ...this.deletedEdges]);
+    }
+}
