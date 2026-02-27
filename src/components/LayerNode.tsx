@@ -1,7 +1,7 @@
 import React, { memo } from 'react';
 import type { NodeProps, Node } from '@xyflow/react';
-import { NodeResizer, Handle, Position, useReactFlow } from '@xyflow/react';
-import { Layers } from 'lucide-react';
+import { Handle, Position, useReactFlow } from '@xyflow/react';
+import { Layers, X } from 'lucide-react';
 import clsx from 'clsx';
 import { NeuralLayer } from '../models/neural';
 
@@ -11,7 +11,7 @@ export type LayerNodeData = Record<string, unknown> & {
 
 export const LayerNode: React.FC<NodeProps<Node<LayerNodeData>>> = memo(({ data, id, selected }) => {
     const layer = data.layer;
-    const { getNodes } = useReactFlow();
+    const { getNodes, deleteElements } = useReactFlow();
 
     // Calculate total neurons (including pixel matrix inner sizes)
     const children = getNodes().filter(n => n.parentId === id);
@@ -28,21 +28,27 @@ export const LayerNode: React.FC<NodeProps<Node<LayerNodeData>>> = memo(({ data,
 
     return (
         <>
-            <NodeResizer
-                color="#64748b"
-                isVisible={selected}
-                minWidth={200}
-                minHeight={200}
-            />
             <div
                 className={clsx(
-                    'relative w-full h-full rounded-2xl border-2 transition-colors duration-300 backdrop-blur-sm pointer-events-none flex flex-col',
+                    'relative group w-full h-full rounded-2xl border-2 transition-colors duration-300 backdrop-blur-sm pointer-events-none flex flex-col',
                     {
                         'bg-slate-900/40 border-slate-700 border-dashed': !selected,
-                        'bg-slate-800/60 border-blue-500 shadow-[0_0_20px_rgba(59,130,246,0.1)] border-solid': selected,
+                        'bg-slate-800/60 border-blue-500 shadow-[0_0_20px_rgba(59,130,246,0.1)] border-solid scale-105': selected,
                     }
                 )}
             >
+                {/* Delete Button */}
+                <button
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        deleteElements({ nodes: [{ id }] });
+                    }}
+                    className="absolute -top-3 -right-3 w-6 h-6 bg-red-500/20 hover:bg-red-500 text-red-500 hover:text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200 z-20 pointer-events-auto"
+                    title="Deletar camada"
+                >
+                    <X className="w-4 h-4" />
+                </button>
+
                 {/* Header Badge */}
                 <div className="absolute top-0 left-4 -translate-y-1/2 flex items-center gap-2 px-3 py-1 bg-slate-800 border border-slate-600 rounded-full shadow-lg pointer-events-auto cursor-pointer z-10">
                     <Layers className="w-4 h-4 text-blue-400" />

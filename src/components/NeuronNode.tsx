@@ -34,6 +34,7 @@ export const NeuronNode: React.FC<NodeProps<Node<NeuronNodeData>>> = ({ id, data
                     'bg-slate-800 border-yellow-500 shadow-yellow-500/20 scale-105': selected && isBiasProvider,
                     'bg-slate-800 border-orange-500 shadow-orange-500/20 scale-105': selected && isOutput,
                     'bg-amber-900/30 border-amber-400/70 shadow-amber-500/20 scale-105': selected && isBias,
+                    'border-emerald-500/50 shadow-emerald-500/10 scale-105': isInput && selected && !isBiasProvider,
                     'border-emerald-500/50 shadow-emerald-500/10': isInput && !selected && !isBiasProvider,
                     'border-yellow-500/50 shadow-yellow-500/10': isInput && !selected && isBiasProvider,
                     'border-blue-500/50 shadow-blue-500/10': isMP && !selected,

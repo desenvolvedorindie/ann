@@ -13,7 +13,12 @@ export const Sidebar: React.FC = () => {
                 <h2 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-cyan-300">
                     Neural Builder
                 </h2>
-                <p className="text-sm text-slate-400 mt-1">Drag components</p>
+                <div className="flex flex-col gap-2 mt-1">
+                    <p className="text-sm text-slate-400">Arraste os componentes</p>
+                    <div className="bg-blue-500/10 border border-blue-500/20 text-blue-300 text-[10px] px-2 py-1.5 rounded-md leading-relaxed">
+                        <b>Dica:</b> Segure <kbd className="px-1 py-0.5 bg-slate-800 border border-slate-700 rounded text-slate-300 font-mono">Ctrl</kbd> ao soltar para adicionar múltiplos elementos.
+                    </div>
+                </div>
             </div>
 
             <div className="flex flex-col gap-6">

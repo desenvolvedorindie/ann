@@ -474,7 +474,7 @@ function App() {
             </div>
             {/* Side Panels - Only visible in Architecture mode */}
             {isArchitectureMode && (
-              <div className="flex flex-col flex-shrink-0 h-full overflow-hidden w-80">
+              <div className="flex flex-col flex-shrink-0 h-full overflow-hidden">
                 {historyState && (
                   <HistoryPanel
                     commands={historyState.commands}

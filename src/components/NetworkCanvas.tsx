@@ -79,6 +79,7 @@ const Flow = forwardRef<NetworkCanvasRef, FlowProps>(({ onSelectNode, onSelectEd
     const [nodes, setNodes] = useState<Node<NeuralNodeData>[]>(initialNodes);
     const [edges, setEdges] = useState<Edge[]>(initialEdges);
     const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance | null>(null);
+    const isDraggingNodesRef = useRef(false);
 
     // Command history
     const history = useCommandHistory();
@@ -96,6 +97,48 @@ const Flow = forwardRef<NetworkCanvasRef, FlowProps>(({ onSelectNode, onSelectEd
         getEdges: () => edgesRef.current,
     }), [neuronsRef, synapsesRef]);
 
+    // Auto-resize layer nodes to fit their children whenever nodes change
+    React.useEffect(() => {
+        const PADDING = 20;
+        const HEADER_EXTRA = 20; // extra top space for the header badge
+        const DEFAULT_CHILD_W = 120;
+        const DEFAULT_CHILD_H = 60;
+
+        const layerNodes = nodes.filter(n => n.type === 'layerNode');
+        if (layerNodes.length === 0 || isDraggingNodesRef.current) return;
+
+        let changed = false;
+        const updated = nodes.map(n => {
+            if (n.type !== 'layerNode') return n;
+            const children = nodes.filter(c => c.parentId === n.id);
+            if (children.length === 0) return n;
+
+            const maxRight = children.reduce((acc, c) => {
+                const w = c.measured?.width ?? DEFAULT_CHILD_W;
+                return Math.max(acc, c.position.x + w);
+            }, 0);
+            const maxBottom = children.reduce((acc, c) => {
+                const h = c.measured?.height ?? DEFAULT_CHILD_H;
+                return Math.max(acc, c.position.y + h);
+            }, 0);
+
+            const newW = Math.max(240, maxRight + PADDING);
+            const newH = Math.max(160, maxBottom + PADDING + HEADER_EXTRA);
+
+            const curW = (n.style as any)?.width ?? n.measured?.width ?? 240;
+            const curH = (n.style as any)?.height ?? n.measured?.height ?? 160;
+
+            if (Math.abs(newW - curW) < 1 && Math.abs(newH - curH) < 1) return n;
+
+            changed = true;
+            return { ...n, style: { ...(n.style ?? {}), width: newW, height: newH } };
+        });
+
+        if (changed) {
+            setNodes(updated as Node<NeuralNodeData>[]);
+        }
+    }, [nodes]);
+
     // Expose history state to parent
     React.useEffect(() => {
         onHistoryChange({
@@ -112,7 +155,92 @@ const Flow = forwardRef<NetworkCanvasRef, FlowProps>(({ onSelectNode, onSelectEd
 
     // Modal state for multi-drop
     const [isMultiDropOpen, setIsMultiDropOpen] = useState(false);
-    const [pendingDrop, setPendingDrop] = useState<{ type: NeuronType; position: { x: number, y: number } } | null>(null);
+    const [pendingDrop, setPendingDrop] = useState<{ type: NeuronType; position: { x: number, y: number }; clientX: number; clientY: number } | null>(null);
+
+    // Track active panning forced by the user (spacebar or middle mouse button)
+    const [isTempPanning, setIsTempPanning] = useState(false);
+
+    // Copy / Paste State
+    const copiedNodesRef = useRef<{ node: Node<NeuralNodeData>, type: NeuronType | 'layer' }[]>([]);
+    const pasteCountRef = useRef<number>(0);
+
+    React.useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.code === 'Space' && !e.repeat) setIsTempPanning(true);
+
+            // Handle Copy
+            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c') {
+                const selected = nodesRef.current.filter(n => n.selected);
+                if (selected.length > 0) {
+                    copiedNodesRef.current = selected.map(n => {
+                        const isLayer = n.type === 'layerNode';
+                        const type = isLayer ? 'layer' : (n.data as any)?.neuron?.type || 'm-pitts';
+                        return { node: n, type };
+                    });
+                    pasteCountRef.current = 0; // Reset offset counter on new copy
+                }
+            }
+
+            // Handle Paste
+            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v') {
+                if (copiedNodesRef.current.length > 0 && workspace === 'architecture') {
+                    const newNodesList: Node<NeuralNodeData>[] = [];
+                    const newNeuronsMap = new Map<string, INeuron>();
+
+                    pasteCountRef.current += 1;
+                    const offsetMultiplier = pasteCountRef.current;
+
+                    copiedNodesRef.current.forEach(copied => {
+                        const offset = 40 * offsetMultiplier; // Offset cascata cumulativo
+                        const newPos = { x: copied.node.position.x + offset, y: copied.node.position.y + offset };
+
+                        // Recria o neuronio com o mesmo tipo e posição
+                        const { node: newNode, neuron: newNeuron } = instantiateNode(copied.type, newPos);
+
+                        // Preserve some visual styling if it was a layer
+                        if (newNode.type === 'layerNode') {
+                            newNode.style = { ...copied.node.style };
+                        }
+
+                        // Select the new node automatically
+                        newNode.selected = true;
+
+                        newNodesList.push(newNode);
+                        newNeuronsMap.set(newNode.id, newNeuron);
+                    });
+
+                    if (newNodesList.length > 0) {
+                        const cmd = new AddNodesCommand(cmdCtx, newNodesList, newNeuronsMap, `Colar ${newNodesList.length} nó(s)`);
+                        history.push(cmd);
+
+                        // Force focus back to canvas so the selection is visually rendered by React Flow
+                        setTimeout(() => reactFlowWrapper.current?.focus(), 50);
+                    }
+                }
+            }
+        };
+        const handleKeyUp = (e: KeyboardEvent) => {
+            if (e.code === 'Space') setIsTempPanning(false);
+        };
+        const handleMouseDown = (e: MouseEvent) => {
+            if (e.button === 1) setIsTempPanning(true); // Middle click
+        };
+        const handleMouseUp = (e: MouseEvent) => {
+            if (e.button === 1) setIsTempPanning(false);
+        };
+
+        window.addEventListener('keydown', handleKeyDown, { capture: true });
+        window.addEventListener('keyup', handleKeyUp, { capture: true });
+        window.addEventListener('mousedown', handleMouseDown, { capture: true });
+        window.addEventListener('mouseup', handleMouseUp, { capture: true });
+
+        return () => {
+            window.removeEventListener('keydown', handleKeyDown, { capture: true });
+            window.removeEventListener('keyup', handleKeyUp, { capture: true });
+            window.removeEventListener('mousedown', handleMouseDown, { capture: true });
+            window.removeEventListener('mouseup', handleMouseUp, { capture: true });
+        };
+    }, []);
 
     const topologyCacheRef = useRef<{ lastHistoryVersion: number; lastShowRawConnections: boolean; edgesToRemove: Set<string>; virtualEdges: Edge[] }>({
         lastHistoryVersion: -1,
@@ -157,6 +285,14 @@ const Flow = forwardRef<NetworkCanvasRef, FlowProps>(({ onSelectNode, onSelectEd
         },
         [cmdCtx, history]
     );
+
+    // Clear selection when navigating away from or to workspaces
+    React.useEffect(() => {
+        setNodes(nds => nds.map(n => n.selected ? { ...n, selected: false } : n));
+        setEdges(eds => eds.map(e => e.selected ? { ...e, selected: false } : e));
+        onSelectNode(null);
+        onSelectEdge(null);
+    }, [workspace, onSelectNode, onSelectEdge]);
 
     React.useEffect(() => {
         const rafId = requestAnimationFrame(() => {
@@ -224,18 +360,23 @@ const Flow = forwardRef<NetworkCanvasRef, FlowProps>(({ onSelectNode, onSelectEd
                                     }
                                 });
 
-                                const validSources = flattenedSources.filter(s => s.neuron.type !== 'input');
+                                const validSources = flattenedSources;
                                 const validTargets = flattenedTargets.filter(t => t.neuron.type !== 'input' && t.neuron.type !== 'bias');
 
                                 // Discover if this pair is fully connected
-                                for (let sIdx = 0; sIdx < validSources.length; sIdx++) {
-                                    const { node: srcNode, handleId: srcHandleId, neuron: srcNeuronActual } = validSources[sIdx];
+                                let outputTargetIndex = 0;
 
-                                    for (let tIdx = 0; tIdx < validTargets.length; tIdx++) {
-                                        const { node: tgtNode, handleId: tgtHandleId, neuron: tgtNeuron } = validTargets[tIdx];
+                                for (let tIdx = 0; tIdx < validTargets.length; tIdx++) {
+                                    const { node: tgtNode, handleId: tgtHandleId, neuron: tgtNeuron } = validTargets[tIdx];
+                                    const requiresStrictMapping = tgtNeuron.type === 'output' || tgtNeuron.type === 'pixel-matrix';
 
-                                        // 1:1 mapping enforce
-                                        if ((tgtNeuron.type === 'output' || tgtNeuron.type === 'pixel-matrix') && sIdx !== tIdx) continue;
+                                    for (let sIdx = 0; sIdx < validSources.length; sIdx++) {
+                                        const { node: srcNode, handleId: srcHandleId, neuron: srcNeuronActual } = validSources[sIdx];
+
+                                        // 1:1 mapping enforce mirrored from onConnect
+                                        if (requiresStrictMapping) {
+                                            if (sIdx !== outputTargetIndex) continue;
+                                        }
 
                                         let targetHandle = 'input';
                                         if (tgtNeuron.type === 'pixel-matrix') {
@@ -257,6 +398,11 @@ const Flow = forwardRef<NetworkCanvasRef, FlowProps>(({ onSelectNode, onSelectEd
                                             currentPairEdges.push(matchingEdge.id);
                                         }
                                     }
+
+                                    if (requiresStrictMapping) {
+                                        outputTargetIndex++;
+                                    }
+
                                     if (!fullyConnected) break;
                                 }
 
@@ -451,21 +597,26 @@ const Flow = forwardRef<NetworkCanvasRef, FlowProps>(({ onSelectNode, onSelectEd
                     }
                 });
 
-                const validSources = flattenedSources.filter(s => s.neuron.type !== 'input');
+                const validSources = flattenedSources;
                 const validTargets = flattenedTargets.filter(t => t.neuron.type !== 'input' && t.neuron.type !== 'bias');
 
-                validTargets.forEach((tgtPoint, tIdx) => {
+                let outputTargetIndex = 0;
+
+                validTargets.forEach((tgtPoint) => {
                     const { node: tgtNode, handleId: tgtHandleId, neuron: tgtNeuron } = tgtPoint;
+                    const requiresStrictMapping = tgtNeuron.type === 'output' || tgtNeuron.type === 'pixel-matrix';
+
+                    let sourceAssignedToThisTarget = 0;
 
                     validSources.forEach((srcPoint, sIdx) => {
-                        // Se o neurônio da camada alvo for do tipo 'output' ou um pixel da 'pixel-matrix', as conexões devem ser 1:1 exato com a source achatada
-                        if ((tgtNeuron.type === 'output' || tgtNeuron.type === 'pixel-matrix') && sIdx !== tIdx) {
-                            return;
+                        // 1. Input/Bias (Source) - validSources already filtered them out.
+                        // 2. Output & PixelMatrix (Target) - strict 1:1 mapping by aligned index.
+                        if (requiresStrictMapping) {
+                            if (sIdx !== outputTargetIndex) return;
                         }
 
                         const { node: srcNode, handleId: srcHandleId, neuron: srcNeuronActual } = srcPoint;
 
-                        // Determinar o handle alvo correto com base no tipo do neurônio alvo
                         let targetHandle = 'input';
                         if (tgtNeuron.type === 'pixel-matrix') {
                             targetHandle = tgtHandleId || 'pixel-in-0';
@@ -483,8 +634,8 @@ const Flow = forwardRef<NetworkCanvasRef, FlowProps>(({ onSelectNode, onSelectEd
 
                         if (!connectionExists) {
                             if (tgtNeuron.type === 'output') {
-                                const alreadyConnected = edges.some(e => e.target === tgtNode.id) || newEdges.some(e => e.target === tgtNode.id);
-                                if (alreadyConnected) return;
+                                const hasCanvasEdge = newEdges.some(e => e.target === tgtNode.id);
+                                if (hasCanvasEdge) return;
                             }
 
                             const synapse = new Synapse(srcNeuronActual, tgtNeuron, 1, srcHandleId, targetHandle);
@@ -514,7 +665,13 @@ const Flow = forwardRef<NetworkCanvasRef, FlowProps>(({ onSelectNode, onSelectEd
                                 markerEnd: { type: MarkerType.ArrowClosed, color },
                             });
                         }
+
+                        sourceAssignedToThisTarget++;
                     });
+
+                    if (requiresStrictMapping) {
+                        outputTargetIndex++;
+                    }
                 });
 
                 if (newEdges.length > 0) {
@@ -589,9 +746,11 @@ const Flow = forwardRef<NetworkCanvasRef, FlowProps>(({ onSelectNode, onSelectEd
 
         // Layer connections are only valid layer-out → layer-in
         if (sourceIsLayer || targetIsLayer) {
-            if (!(sourceIsLayer && targetIsLayer &&
+            if (sourceIsLayer && targetIsLayer &&
                 connection.sourceHandle === 'layer-out' &&
-                connection.targetHandle === 'layer-in')) {
+                connection.targetHandle === 'layer-in') {
+                return true; // Pass quickly, skip neuron checks
+            } else {
                 return false;
             }
         }
@@ -672,6 +831,46 @@ const Flow = forwardRef<NetworkCanvasRef, FlowProps>(({ onSelectNode, onSelectEd
         };
     }, []);
 
+    // Find layer under cursor using DOM hit-testing.
+    // Walks up from elementFromPoint looking for the .react-flow__node wrapper of a layer.
+    // Returns the wrapper element (accurate getBoundingClientRect) plus the matching flow node.
+    const findLayerAtCursor = useCallback((clientX: number, clientY: number): { node: import('@xyflow/react').Node; el: HTMLElement } | undefined => {
+        let el = document.elementFromPoint(clientX, clientY) as HTMLElement | null;
+        while (el) {
+            if (el.classList.contains('react-flow__node')) {
+                const nodeId = el.dataset?.id;
+                if (nodeId) {
+                    const node = nodesRef.current.find(n => n.id === nodeId && n.type === 'layerNode');
+                    if (node) return { node, el };
+                }
+            }
+            el = el.parentElement;
+        }
+        return undefined;
+    }, []);
+
+    // Compute next available position inside a layer matching the processDroppedNodes logic exactly
+    const nextPositionInLayer = useCallback((layerId: string, indexOffset = 0) => {
+        const dropX = 30;
+        const startY = 40;
+        const gap = 15;
+        const DEFAULT_NODE_HEIGHT = 80;
+
+        const children = nodesRef.current.filter(n => n.parentId === layerId);
+        children.sort((a, b) => a.position.y - b.position.y);
+
+        let currentY = startY;
+        children.forEach((child) => {
+            const childHeight = (child.measured?.height) || (child.style?.height as number) || DEFAULT_NODE_HEIGHT;
+            currentY += childHeight + gap;
+        });
+
+        // Add index offsets for multi-drop
+        currentY += indexOffset * (DEFAULT_NODE_HEIGHT + gap);
+
+        return { x: dropX, y: currentY };
+    }, []);
+
     const handleMultiDropConfirm = useCallback((count: number) => {
         if (!pendingDrop) return;
 
@@ -688,10 +887,37 @@ const Flow = forwardRef<NetworkCanvasRef, FlowProps>(({ onSelectNode, onSelectEd
             yOffset = type === 'pixel-matrix' ? 160 : 100; // Drop neurons vertically
         }
 
+        // Deselect is done atomically in AddNodesCommand.execute when nodes have selected:true
+
+        // Find if the drop position falls inside an existing layer based on canvas coordinates
+        let layerTargetId: string | null = null;
+        if (type !== 'layer') {
+            const hitLayer = nodesRef.current.find(n => {
+                if (n.type !== 'layerNode') return false;
+                const layerW = (n.measured?.width ?? (n.style as any)?.width) || 240;
+                const layerH = (n.measured?.height ?? (n.style as any)?.height) || 180;
+                return (
+                    position.x >= n.position.x - 20 && position.x <= n.position.x + layerW + 20 &&
+                    position.y >= n.position.y - 20 && position.y <= n.position.y + layerH + 20
+                );
+            });
+            if (hitLayer) layerTargetId = hitLayer.id;
+        }
+
         for (let i = 0; i < count; i++) {
             const pos = { x: position.x + (i * xOffset), y: position.y + (i * yOffset) };
             const { node, neuron } = instantiateNode(type, pos);
-            newNodes.push(node);
+
+            let finalNode = node as Node;
+            if (layerTargetId) {
+                finalNode = {
+                    ...finalNode,
+                    parentId: layerTargetId,
+                    position: nextPositionInLayer(layerTargetId, i),
+                };
+            }
+
+            newNodes.push({ ...finalNode, selected: true } as Node<NeuralNodeData>);
             newNeurons.set(neuron.id, neuron);
         }
 
@@ -699,7 +925,7 @@ const Flow = forwardRef<NetworkCanvasRef, FlowProps>(({ onSelectNode, onSelectEd
         const cmd = new AddNodesCommand(cmdCtx, newNodes as Node[], newNeurons, `Adicionar ${count}x ${typeLabels[type] || type}`);
         history.push(cmd);
         setPendingDrop(null);
-    }, [pendingDrop, instantiateNode, cmdCtx, history]);
+    }, [pendingDrop, instantiateNode, findLayerAtCursor, nextPositionInLayer, cmdCtx, history]);
 
     const onDrop = useCallback(
         (event: React.DragEvent) => {
@@ -718,18 +944,33 @@ const Flow = forwardRef<NetworkCanvasRef, FlowProps>(({ onSelectNode, onSelectEd
             });
 
             if (event.ctrlKey || event.metaKey) {
-                setPendingDrop({ type, position });
+                setPendingDrop({ type, position, clientX: event.clientX, clientY: event.clientY });
                 setIsMultiDropOpen(true);
             } else {
                 const { node, neuron } = instantiateNode(type, position);
                 const neurons = new Map<string, INeuron>();
                 neurons.set(neuron.id, neuron);
+
+                // Auto-parent into layer if dropped inside one (skip for 'layer' type itself)
+                let finalNode = node as Node;
+                if (type !== 'layer') {
+                    const layerHit = findLayerAtCursor(event.clientX, event.clientY);
+                    if (layerHit) {
+                        const { node: targetLayer } = layerHit;
+                        finalNode = {
+                            ...finalNode,
+                            parentId: targetLayer.id,
+                            position: nextPositionInLayer(targetLayer.id),
+                        };
+                    }
+                }
+
                 const typeLabels: Record<string, string> = { input: 'Input', output: 'Output', 'mcculloch-pitts': 'M-P', 'pixel-matrix': 'Pixel Matrix', layer: 'Layer' };
-                const cmd = new AddNodesCommand(cmdCtx, [node as Node], neurons, `Adicionar ${typeLabels[type] || type}`);
+                const cmd = new AddNodesCommand(cmdCtx, [{ ...finalNode, selected: true }], neurons, `Adicionar ${typeLabels[type] || type}`);
                 history.push(cmd);
             }
         },
-        [reactFlowInstance, instantiateNode, cmdCtx, history]
+        [reactFlowInstance, instantiateNode, findLayerAtCursor, nextPositionInLayer, cmdCtx, history]
     );
 
     const onSelectionChange = useCallback((params: OnSelectionChangeParams) => {
@@ -765,6 +1006,7 @@ const Flow = forwardRef<NetworkCanvasRef, FlowProps>(({ onSelectNode, onSelectEd
     const dragStartPositionsRef = useRef<Map<string, { x: number; y: number; parentId?: string }>>(new Map());
 
     const onNodeDragStart = useCallback((_event: React.MouseEvent, _node: Node, activeNodes: Node[]) => {
+        isDraggingNodesRef.current = true;
         const positions = new Map<string, { x: number; y: number; parentId?: string }>();
         activeNodes.forEach(n => {
             const currentNode = nodesRef.current.find(cn => cn.id === n.id);
@@ -776,6 +1018,7 @@ const Flow = forwardRef<NetworkCanvasRef, FlowProps>(({ onSelectNode, onSelectEd
     }, []);
 
     const onSelectionDragStart = useCallback((_event: React.MouseEvent, selectedNodes: Node[]) => {
+        isDraggingNodesRef.current = true;
         const positions = new Map<string, { x: number; y: number; parentId?: string }>();
         selectedNodes.forEach(n => {
             const currentNode = nodesRef.current.find(cn => cn.id === n.id);
@@ -947,11 +1190,13 @@ const Flow = forwardRef<NetworkCanvasRef, FlowProps>(({ onSelectNode, onSelectEd
     }, [cmdCtx, history]);
 
     const onNodeDragStop = useCallback((_event: React.MouseEvent, _node: Node, activeNodes: Node[]) => {
+        isDraggingNodesRef.current = false;
         processDroppedNodes(activeNodes);
         pushMoveCommand(activeNodes);
     }, [processDroppedNodes, pushMoveCommand]);
 
     const onSelectionDragStop = useCallback((_event: React.MouseEvent, selectedNodes: Node[]) => {
+        isDraggingNodesRef.current = false;
         processDroppedNodes(selectedNodes);
         pushMoveCommand(selectedNodes);
     }, [processDroppedNodes, pushMoveCommand]);
@@ -1059,7 +1304,20 @@ const Flow = forwardRef<NetworkCanvasRef, FlowProps>(({ onSelectNode, onSelectEd
     return (
         <div className="flex h-full w-full flex-1 bg-slate-900 text-slate-100 overflow-hidden font-sans">
             {workspace === 'architecture' && <Sidebar />}
-            <div className="flex-1 relative" ref={reactFlowWrapper}>
+            <div className={`flex-1 relative react-flow-wrapper`} ref={reactFlowWrapper}>
+                {toolMode === 'select' && !isTempPanning && (
+                    <style>{`
+                        .react-flow-wrapper .react-flow {
+                            cursor: default !important;
+                        }
+                        .react-flow-wrapper .react-flow__pane {
+                            cursor: default !important;
+                        }
+                        .react-flow-wrapper .react-flow__pane.dragging {
+                            cursor: default !important;
+                        }
+                    `}</style>
+                )}
                 <ReactFlow
                     nodes={nodes}
                     edges={edges}
@@ -1083,8 +1341,9 @@ const Flow = forwardRef<NetworkCanvasRef, FlowProps>(({ onSelectNode, onSelectEd
                         animated: true,
                     }}
                     deleteKeyCode={workspace === 'architecture' ? ['Backspace', 'Delete'] : null}
-                    multiSelectionKeyCode="Shift"
-                    selectionKeyCode={null}
+                    multiSelectionKeyCode={['Shift', 'Control', 'Meta']}
+                    snapToGrid={true}
+                    snapGrid={[20, 20]}
                     fitView
                     nodesDraggable={workspace === 'architecture'}
                     nodesConnectable={workspace === 'architecture'}
@@ -1092,7 +1351,7 @@ const Flow = forwardRef<NetworkCanvasRef, FlowProps>(({ onSelectNode, onSelectEd
                     panOnDrag={toolMode === 'pan' ? [0, 1, 2] : [1, 2]}
                     selectionOnDrag={toolMode === 'select' && workspace === 'architecture'}
                     panOnScroll={toolMode === 'select'} // Allow panning with wheel when selection is dragging mode
-                    selectionMode={workspace === 'architecture' ? SelectionMode.Partial : undefined} // Partial selection
+                    selectionMode={SelectionMode.Partial}
                     proOptions={{ hideAttribution: true }}
                     onlyRenderVisibleElements={true}
                     className="bg-slate-900"

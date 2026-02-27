@@ -121,7 +121,7 @@ export const TrainingWorkspace: React.FC<TrainingWorkspaceProps> = ({
         return traces;
     }, [pathPoints]);
 
-    const plotLayout = useMemo<Partial<Plotly.Layout>>(() => ({
+    const [plotLayout, setPlotLayout] = useState<Partial<Plotly.Layout>>({
         paper_bgcolor: 'transparent',
         plot_bgcolor: 'transparent',
         margin: { l: 0, r: 0, t: 0, b: 0 },
@@ -132,9 +132,9 @@ export const TrainingWorkspace: React.FC<TrainingWorkspaceProps> = ({
             zaxis: { showgrid: false, zeroline: false, showticklabels: false, title: { text: '' } },
             camera: { eye: { x: 1.6, y: 1.6, z: 1 } },
         },
-        uirevision: 'true',
+        uirevision: 1,
         autosize: true,
-    }), []);
+    });
 
     const errorChart = (fullHeight?: boolean) => (
         <ResponsiveContainer width="100%" height={fullHeight ? '100%' : 192}>
@@ -156,6 +156,7 @@ export const TrainingWorkspace: React.FC<TrainingWorkspaceProps> = ({
         <Plot
             data={plotData}
             layout={plotLayout}
+            onUpdate={(figure) => setPlotLayout(figure.layout)}
             config={{ displayModeBar: false, responsive: true }}
             style={{ width: '100%', height: '100%' }}
             useResizeHandler

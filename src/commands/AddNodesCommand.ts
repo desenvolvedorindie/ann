@@ -18,7 +18,12 @@ export class AddNodesCommand implements ICommand {
 
     execute(): void {
         this.neurons.forEach((neuron, id) => this.ctx.neuronsRef.current.set(id, neuron));
-        this.ctx.setNodes(nds => ensureParentOrder([...nds, ...this.nodes]));
+        const hasSelected = this.nodes.some(n => n.selected);
+        this.ctx.setNodes(nds => {
+            // If any new node is selected, deselect all existing ones atomically
+            const base = hasSelected ? nds.map(n => ({ ...n, selected: false })) : nds;
+            return ensureParentOrder([...base, ...this.nodes]);
+        });
     }
 
     undo(): void {

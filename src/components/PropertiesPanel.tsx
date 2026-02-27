@@ -127,14 +127,6 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                         </div>
                     </div>
 
-                    {selectedNode.type === 'mcculloch-pitts' && (
-                        <div className="flex flex-col gap-1 mt-4 p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg">
-                            <h3 className="text-sm font-semibold text-blue-400 mb-1">Dica de Threshold</h3>
-                            <p className="text-xs text-slate-400 leading-relaxed">
-                                O Limiar (Threshold) deste neurônio não é mais um parâmetro fixo. Conecte outro neurônio à entrada amarela superior (Threshold) para definir dinamicamente o valor de ativação através do peso da sinapse.
-                            </p>
-                        </div>
-                    )}
 
                     {selectedNode.type === 'input' && (
                         <NumberInput
