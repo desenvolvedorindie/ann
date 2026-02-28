@@ -34,19 +34,19 @@ export const HistoryPanel: React.FC<HistoryPanelProps> = ({
     }, [pointer]);
 
     return (
-        <div className="flex flex-col bg-slate-900 border-b border-slate-700">
+        <div className="w-full flex flex-col bg-slate-900 border-b border-slate-700">
             {/* Header */}
             <div className="flex items-center justify-between px-3 py-2 border-b border-slate-700 bg-slate-800/50">
                 <div className="flex items-center gap-2">
                     <History className="w-4 h-4 text-blue-400" />
-                    <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">Histórico</span>
+                    <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">History</span>
                 </div>
                 <div className="flex items-center gap-1">
                     <button
                         onClick={onUndo}
                         disabled={!canUndo}
                         className={`p-1 rounded transition-all ${canUndo ? 'text-slate-300 hover:bg-slate-700 hover:text-white' : 'text-slate-600 cursor-not-allowed'}`}
-                        title="Desfazer (Ctrl+Z)"
+                        title="Undo (Ctrl+Z)"
                     >
                         <Undo2 className="w-3.5 h-3.5" />
                     </button>
@@ -54,7 +54,7 @@ export const HistoryPanel: React.FC<HistoryPanelProps> = ({
                         onClick={onRedo}
                         disabled={!canRedo}
                         className={`p-1 rounded transition-all ${canRedo ? 'text-slate-300 hover:bg-slate-700 hover:text-white' : 'text-slate-600 cursor-not-allowed'}`}
-                        title="Refazer (Ctrl+Y)"
+                        title="Redo (Ctrl+Y)"
                     >
                         <Redo2 className="w-3.5 h-3.5" />
                     </button>
@@ -73,7 +73,7 @@ export const HistoryPanel: React.FC<HistoryPanelProps> = ({
                         }`}
                 >
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 flex-shrink-0" />
-                    Estado Inicial
+                    Initial State
                 </button>
 
                 {commands.map((cmd, index) => {
@@ -101,7 +101,7 @@ export const HistoryPanel: React.FC<HistoryPanelProps> = ({
 
                 {commands.length === 0 && (
                     <div className="px-3 py-4 text-xs text-slate-600 text-center italic">
-                        Nenhuma ação ainda
+                        No actions yet
                     </div>
                 )}
             </div>

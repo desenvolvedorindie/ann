@@ -39,7 +39,7 @@ export const TrainingTimeline: React.FC<TrainingTimelineProps> = ({
                 </div>
 
                 <div className="text-xs text-slate-400 font-mono">
-                    Frame Atual: <span className="text-amber-400 font-bold">{currentFrame}</span> / {dataset ? dataset.rows.length - 1 : 0}
+                    Current Frame: <span className="text-amber-400 font-bold">{currentFrame}</span> / {dataset ? dataset.rows.length - 1 : 0}
                 </div>
             </div>
 
@@ -106,7 +106,7 @@ export const TrainingTimeline: React.FC<TrainingTimelineProps> = ({
                             </div>
                         );
                     }) : (
-                        <div className="text-slate-500 text-xs italic">Nenhum dataset selecionado.</div>
+                        <div className="text-slate-500 text-xs italic">No dataset selected.</div>
                     )}
                 </div>
             </div>

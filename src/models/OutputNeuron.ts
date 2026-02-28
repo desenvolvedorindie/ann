@@ -22,7 +22,13 @@ export class OutputNeuron implements INeuron {
             const preOut = synapse.preSynaptic.output;
 
             if (Array.isArray(preOut)) {
-                if (synapse.sourceHandle && synapse.sourceHandle.startsWith('pixel-')) {
+                if (synapse.sourceIndex !== undefined) {
+                    if (synapse.sourceIndex >= 0 && synapse.sourceIndex < preOut.length) {
+                        this.output = preOut[synapse.sourceIndex];
+                    } else {
+                        this.output = 0;
+                    }
+                } else if (synapse.sourceHandle && synapse.sourceHandle.startsWith('pixel-')) {
                     const pixelIndex = parseInt(synapse.sourceHandle.replace('pixel-', ''), 10);
                     if (!isNaN(pixelIndex) && pixelIndex >= 0 && pixelIndex < preOut.length) {
                         this.output = preOut[pixelIndex];

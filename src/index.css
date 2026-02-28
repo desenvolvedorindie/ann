@@ -48,3 +48,12 @@ body {
 .react-flow__controls-button:last-child {
   border-bottom: none !important;
 }
+
+/* Edge Selection Highlight */
+.react-flow__edge.selected .react-flow__edge-path,
+.react-flow__edge:focus .react-flow__edge-path,
+.react-flow__edge:focus-visible .react-flow__edge-path {
+  stroke: #c084fc !important; /* purple-400 */
+  stroke-width: 4 !important;
+  filter: drop-shadow(0 0 6px rgba(192, 132, 252, 0.8));
+}

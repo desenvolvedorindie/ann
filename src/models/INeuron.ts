@@ -6,8 +6,9 @@ export interface INeuron {
     type: NeuronType;
     label: string;
     output: number | number[];
+    bias?: number;
     get size(): number;
     calculateOutput(incomingSynapses: ISynapse[]): number | number[];
 }
 
-export type NeuronPartialUpdate = Partial<INeuron> & { width?: number; height?: number; };
+export type NeuronPartialUpdate = Partial<INeuron> & { width?: number; height?: number; order?: number; shape?: number[]; };

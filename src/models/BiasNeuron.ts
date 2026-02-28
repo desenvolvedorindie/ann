@@ -3,7 +3,7 @@ import type { INeuron, ISynapse, NeuronType } from './types';
 
 /**
  * BiasNeuron always outputs 1.
- * When connected to a McCulloch-Pitts neuron via the 'input' handle,
+ * When connected to a Perceptron neuron via the 'input' handle,
  * the synapse weight becomes the effective bias contribution:
  *   net_input += weight * 1 = weight
  * This allows a single BiasNeuron to be reused across multiple M-P neurons,

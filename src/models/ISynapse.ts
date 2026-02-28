@@ -7,4 +7,6 @@ export interface ISynapse {
     weight: number;
     sourceHandle?: string;
     targetHandle?: string;
+    sourceIndex?: number;
+    targetIndex?: number;
 }

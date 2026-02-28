@@ -13,7 +13,7 @@ export class AddNodesCommand implements ICommand {
         this.ctx = ctx;
         this.nodes = nodes.map(n => ({ ...n }));
         this.neurons = new Map(neurons);
-        this.label = label || `Adicionar ${nodes.length} nó(s)`;
+        this.label = label || `Add ${nodes.length} node(s)`;
     }
 
     execute(): void {

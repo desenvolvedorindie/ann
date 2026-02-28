@@ -31,8 +31,8 @@ export const MultiDropModal: React.FC<MultiDropModalProps> = ({ isOpen, nodeType
     const nodeNameLabel = () => {
         switch (nodeType) {
             case 'input': return 'Input Neurons';
-            case 'output': return 'Output Neurons';
-            case 'mcculloch-pitts': return 'M-Pitts Neurons';
+            case 'bias': return 'Bias Neurons';
+            case 'perceptron': return 'Perceptrons';
             case 'pixel-matrix': return 'Pixel Matrices';
             default: return 'Neurons';
         }
@@ -50,7 +50,7 @@ export const MultiDropModal: React.FC<MultiDropModalProps> = ({ isOpen, nodeType
                         <div className="p-2 bg-pink-500/20 text-pink-400 rounded-lg">
                             <Layers className="w-5 h-5" />
                         </div>
-                        <h3 className="text-lg font-bold text-slate-100">Criação em Lote</h3>
+                        <h3 className="text-lg font-bold text-slate-100">Batch Creation</h3>
                     </div>
                     <button
                         onClick={onClose}
@@ -62,7 +62,7 @@ export const MultiDropModal: React.FC<MultiDropModalProps> = ({ isOpen, nodeType
 
                 <form onSubmit={handleSubmit} className="p-6">
                     <p className="text-sm text-slate-300 mb-6">
-                        Você soltou <span className="font-bold text-pink-400">{nodeNameLabel()}</span> com a tecla <kbd className="px-2 py-1 bg-slate-800 border border-slate-700 rounded text-xs mx-1 font-mono">CTRL</kbd> pressionada. Quantos nós deseja empilhar?
+                        You dropped <span className="font-bold text-pink-400">{nodeNameLabel()}</span> with the <kbd className="px-2 py-1 bg-slate-800 border border-slate-700 rounded text-xs mx-1 font-mono">CTRL</kbd> key pressed. How many nodes do you want to stack?
                     </p>
 
                     <div className="mb-6">
@@ -89,13 +89,13 @@ export const MultiDropModal: React.FC<MultiDropModalProps> = ({ isOpen, nodeType
                             onClick={onClose}
                             className="px-5 py-2.5 rounded-xl font-medium text-slate-300 hover:text-white hover:bg-slate-800 transition-colors"
                         >
-                            Cancelar
+                            Cancel
                         </button>
                         <button
                             type="submit"
                             className="px-5 py-2.5 rounded-xl font-bold bg-pink-500 hover:bg-pink-400 text-white shadow-lg shadow-pink-500/25 transition-all active:scale-95"
                         >
-                            Criar Nós
+                            Create Nodes
                         </button>
                     </div>
                 </form>

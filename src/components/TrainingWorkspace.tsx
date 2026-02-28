@@ -25,6 +25,8 @@ interface TrainingWorkspaceProps {
     data: TrainingDataPoint[];
     expanded: boolean;
     onExpandChange: (v: boolean) => void;
+    showEpoch: boolean;
+    showErrorSurface: boolean;
 }
 
 // Pre-compute the surface data for f(x1, x2) = x1² + x2² + x1*x2 + x1 + x2 + 5
@@ -40,6 +42,8 @@ export const TrainingWorkspace: React.FC<TrainingWorkspaceProps> = ({
     epoch,
     data,
     onExpandChange,
+    showEpoch,
+    showErrorSurface,
 }) => {
     const [expandedChart, setExpandedChart] = useState<ExpandedChart>(null);
 
@@ -169,7 +173,7 @@ export const TrainingWorkspace: React.FC<TrainingWorkspaceProps> = ({
             <button
                 onClick={closeChart}
                 className="absolute top-4 right-4 p-2 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 transition-all"
-                title="Fechar"
+                title="Close"
             >
                 <X className="w-5 h-5" />
             </button>
@@ -177,7 +181,7 @@ export const TrainingWorkspace: React.FC<TrainingWorkspaceProps> = ({
             {expandedChart === 'error' ? (
                 <div className="flex-1 flex flex-col gap-3 min-h-0">
                     <span className="text-sm font-semibold text-slate-300 flex items-center gap-2">
-                        <Activity className="w-4 h-4 text-pink-400" /> Erro por Época
+                        <Activity className="w-4 h-4 text-pink-400" /> Error per Epoch
                     </span>
                     <div className="flex-1 bg-slate-900/60 rounded-2xl border border-slate-700 p-4 min-h-0">
                         {errorChart(true)}
@@ -186,7 +190,7 @@ export const TrainingWorkspace: React.FC<TrainingWorkspaceProps> = ({
             ) : (
                 <div className="flex-1 flex flex-col gap-3 min-h-0">
                     <span className="text-sm font-semibold text-slate-300 flex items-center gap-2">
-                        <Box className="w-4 h-4 text-violet-400" /> Superfície de Erro
+                        <Box className="w-4 h-4 text-violet-400" /> Error Surface
                     </span>
                     <div className="flex-1 rounded-2xl overflow-hidden border border-slate-700 bg-slate-900/60 min-h-0">
                         {surface3d()}
@@ -209,65 +213,62 @@ export const TrainingWorkspace: React.FC<TrainingWorkspaceProps> = ({
 
                     <div className="flex items-center gap-2 pb-4">
                         <Activity className="w-5 h-5 text-pink-400" />
-                        <h2 className="text-sm font-semibold text-slate-200">Métricas Globais</h2>
+                        <h2 className="text-sm font-semibold text-slate-200">Global Metrics</h2>
                     </div>
 
-                    <div className="flex items-center justify-between bg-slate-800/50 p-3 rounded-xl border border-slate-700/50 -mt-2">
-                        <span className="text-xs text-slate-400">Época Atual</span>
-                        <span className="text-sm font-mono text-slate-200 bg-slate-900 px-2 py-1 rounded">{epoch}</span>
-                    </div>
+                    {showEpoch && (
+                        <>
+                            <div className="flex items-center justify-between bg-slate-800/50 p-3 rounded-xl border border-slate-700/50 -mt-2">
+                                <span className="text-xs text-slate-400">Current Epoch</span>
+                                <span className="text-sm font-mono text-slate-200 bg-slate-900 px-2 py-1 rounded">{epoch}</span>
+                            </div>
 
-                    {/* Error line chart */}
-                    <div className="flex flex-col gap-1">
-                        <div className="flex items-center justify-between">
-                            <span className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Erro por Época</span>
-                            <button
-                                onClick={() => openChart('error')}
-                                className="p-1 rounded text-slate-500 hover:text-slate-200 hover:bg-slate-700 transition-all"
-                                title="Expandir"
-                            >
-                                <Maximize2 className="w-3.5 h-3.5" />
-                            </button>
-                        </div>
-                        <div className="h-48 w-full bg-slate-900/50 rounded-xl p-2 border border-slate-700/50">
-                            {errorChart()}
-                        </div>
-                    </div>
-
-                    {data.length > 0 && (
-                        <div className="flex flex-col gap-1 items-center justify-center p-3 bg-slate-900/30 rounded-xl border border-slate-800">
-                            <span className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Erro Atual</span>
-                            <span className="text-lg text-pink-400 font-mono font-bold tracking-tight">
-                                {data[data.length - 1].error.toFixed(4)}
-                            </span>
-                        </div>
+                            {/* Error line chart */}
+                            <div className="flex flex-col gap-1">
+                                <div className="flex items-center justify-between">
+                                    <span className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Error per Epoch</span>
+                                    <button
+                                        onClick={() => openChart('error')}
+                                        className="p-1 rounded text-slate-500 hover:text-slate-200 hover:bg-slate-700 transition-all"
+                                        title="Expandir"
+                                    >
+                                        <Maximize2 className="w-3.5 h-3.5" />
+                                    </button>
+                                </div>
+                                <div className="h-48 w-full bg-slate-900/50 rounded-xl p-2 border border-slate-700/50">
+                                    {errorChart()}
+                                </div>
+                            </div>
+                        </>
                     )}
 
                     {/* 3D surface */}
-                    <div className="flex flex-col gap-2">
-                        <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                                <Box className="w-4 h-4 text-violet-400" />
-                                <span className="text-xs font-semibold text-slate-300">Superfície de Erro</span>
-                                {pathPoints.length > 0 && (
-                                    <span className="text-[9px] text-slate-500 font-mono">{pathPoints.length} pts</span>
-                                )}
+                    {showErrorSurface && (
+                        <div className="flex flex-col gap-2">
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                    <Box className="w-4 h-4 text-violet-400" />
+                                    <span className="text-xs font-semibold text-slate-300">Error Surface</span>
+                                    {pathPoints.length > 0 && (
+                                        <span className="text-[9px] text-slate-500 font-mono">{pathPoints.length} pts</span>
+                                    )}
+                                </div>
+                                <button
+                                    onClick={() => openChart('surface')}
+                                    className="p-1 rounded text-slate-500 hover:text-slate-200 hover:bg-slate-700 transition-all"
+                                    title="Expandir"
+                                >
+                                    <Maximize2 className="w-3.5 h-3.5" />
+                                </button>
                             </div>
-                            <button
-                                onClick={() => openChart('surface')}
-                                className="p-1 rounded text-slate-500 hover:text-slate-200 hover:bg-slate-700 transition-all"
-                                title="Expandir"
-                            >
-                                <Maximize2 className="w-3.5 h-3.5" />
-                            </button>
+                            <div className="rounded-xl overflow-hidden border border-slate-700/50 bg-slate-900/50" style={{ height: 260 }}>
+                                {surface3d()}
+                            </div>
+                            <p className="text-[9px] text-slate-500 text-center font-mono">
+                                f(x₁, x₂) = x₁² + x₂² + x₁x₂ + x₁ + x₂ + 5
+                            </p>
                         </div>
-                        <div className="rounded-xl overflow-hidden border border-slate-700/50 bg-slate-900/50" style={{ height: 260 }}>
-                            {surface3d()}
-                        </div>
-                        <p className="text-[9px] text-slate-500 text-center font-mono">
-                            f(x₁, x₂) = x₁² + x₂² + x₁x₂ + x₁ + x₂ + 5
-                        </p>
-                    </div>
+                    )}
 
                 </div>
             </div>

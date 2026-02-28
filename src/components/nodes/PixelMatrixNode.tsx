@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Handle, Position, useReactFlow, type NodeProps, type Node } from '@xyflow/react';
 import { X, Trash2 } from 'lucide-react';
 import clsx from 'clsx';
-import type { PixelMatrix, INeuron } from '../models/neural';
+import type { PixelMatrix, INeuron } from '../../models/neural';
 
 export type PixelMatrixNodeData = Record<string, unknown> & {
     neuron: INeuron;
@@ -20,8 +20,9 @@ export const PixelMatrixNode: React.FC<NodeProps<Node<PixelMatrixNodeData>>> = (
     const [isErasing, setIsErasing] = useState(false);
 
     useEffect(() => {
+        // Triggered whenever the matrix model's output array changes reference or content (or manually via tick)
         setPixels([...matrix.output]);
-    }, [matrix, matrix.width, matrix.height]);
+    }, [matrix.output, matrix.width, matrix.height, data.tick]);
 
     const onDelete = (event: React.MouseEvent) => {
         event.stopPropagation();
@@ -89,7 +90,7 @@ export const PixelMatrixNode: React.FC<NodeProps<Node<PixelMatrixNodeData>>> = (
             <button
                 onClick={onDelete}
                 className="absolute -top-3 -right-3 w-6 h-6 bg-red-500/20 hover:bg-red-500 text-red-500 hover:text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200 z-10"
-                title="Deletar Matriz"
+                title="Delete Matrix"
             >
                 <X className="w-4 h-4" />
             </button>
@@ -102,7 +103,7 @@ export const PixelMatrixNode: React.FC<NodeProps<Node<PixelMatrixNodeData>>> = (
                     <button
                         onClick={clearMatrix}
                         className="p-1 hover:bg-slate-700 text-slate-400 hover:text-red-400 rounded transition-colors"
-                        title="Limpar Desenho"
+                        title="Clear Drawing"
                     >
                         <Trash2 className="w-3 h-3" />
                     </button>
@@ -148,14 +149,14 @@ export const PixelMatrixNode: React.FC<NodeProps<Node<PixelMatrixNodeData>>> = (
                                     type="target"
                                     position={Position.Left}
                                     id={`pixel-in-${i}`}
-                                    className="!absolute !transform-none !left-0 !right-0 !top-0 !bottom-0 !m-auto !w-1.5 !h-1.5 !min-w-0 !min-h-0 !bg-transparent !border-0"
+                                    className="!absolute !top-1/2 !left-1/2 !-translate-x-1/2 !-translate-y-1/2 !w-1.5 !h-1.5 !min-w-0 !min-h-0 !bg-transparent !border-0"
                                     style={{ zIndex: 109 }} // Slightly below source so hover effects trigger on source
                                 />
                                 <Handle
                                     type="source"
                                     position={Position.Right}
                                     id={`pixel-${i}`}
-                                    className="!absolute !transform-none !left-0 !right-0 !top-0 !bottom-0 !m-auto !w-1.5 !h-1.5 !min-w-0 !min-h-0 !bg-pink-500 !border-0 hover:!bg-white hover:!scale-150 transition-transform"
+                                    className="!absolute !top-1/2 !left-1/2 !-translate-x-1/2 !-translate-y-1/2 !w-1.5 !h-1.5 !min-w-0 !min-h-0 !bg-pink-500 !border-0 hover:!bg-white hover:!scale-150 transition-transform"
                                     style={{ zIndex: 110 }}
                                 />
                             </div>

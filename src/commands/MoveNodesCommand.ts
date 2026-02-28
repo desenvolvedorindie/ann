@@ -16,7 +16,7 @@ export class MoveNodesCommand implements ICommand {
         this.ctx = ctx;
         this.oldPositions = new Map(oldPositions);
         this.newPositions = new Map(newPositions);
-        this.label = label || `Mover ${oldPositions.size} nó(s)`;
+        this.label = label || `Move ${oldPositions.size} node(s)`;
     }
 
     execute(): void {

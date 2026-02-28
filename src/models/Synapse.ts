@@ -6,15 +6,27 @@ export class Synapse implements ISynapse {
     preSynaptic: INeuron;
     postSynaptic: INeuron;
     weight: number;
+    sourceIndex?: number;
+    targetIndex?: number;
     sourceHandle?: string;
     targetHandle?: string;
 
-    constructor(preSynaptic: INeuron, postSynaptic: INeuron, weight: number = 1, sourceHandle?: string, targetHandle?: string) {
+    constructor(
+        preSynaptic: INeuron,
+        postSynaptic: INeuron,
+        weight: number = 1,
+        sourceHandle?: string,
+        targetHandle?: string,
+        sourceIndex?: number,
+        targetIndex?: number
+    ) {
         this.id = uuidv4();
         this.preSynaptic = preSynaptic;
         this.postSynaptic = postSynaptic;
-        this.weight = weight;
+        this.weight = weight !== undefined ? weight : Number((Math.random() * 2 - 1).toFixed(4));
         this.sourceHandle = sourceHandle;
         this.targetHandle = targetHandle;
+        this.sourceIndex = sourceIndex;
+        this.targetIndex = targetIndex;
     }
 }

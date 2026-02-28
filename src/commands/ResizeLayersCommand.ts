@@ -15,7 +15,7 @@ export class ResizeLayersCommand implements ICommand {
         this.ctx = ctx;
         this.oldStyles = new Map(oldStyles);
         this.newStyles = new Map(newStyles);
-        this.label = 'Redimensionar camada(s)';
+        this.label = 'Redimensionar layer(s)';
     }
 
     execute(): void {

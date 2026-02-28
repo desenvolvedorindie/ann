@@ -16,6 +16,28 @@ export class DeleteEdgesCommand implements ICommand {
         const edgeIdSet = new Set(edgeIds);
         const currentEdges = ctx.getEdges();
 
+        // Resolve virtual edges into physical edges
+        const virtualEdgesToResolve = edgeIds.filter(id => id.startsWith('virtual-'));
+        if (virtualEdgesToResolve.length > 0) {
+            const currentNodes = ctx.getNodes();
+            virtualEdgesToResolve.forEach(vId => {
+                const parts = vId.replace('virtual-', '').split('__');
+                if (parts.length === 2) {
+                    const srcLayerId = parts[0];
+                    const tgtLayerId = parts[1];
+
+                    const srcChildIds = new Set(currentNodes.filter(n => n.parentId === srcLayerId).map(n => n.id));
+                    const tgtChildIds = new Set(currentNodes.filter(n => n.parentId === tgtLayerId).map(n => n.id));
+
+                    currentEdges.forEach(e => {
+                        if (srcChildIds.has(e.source) && tgtChildIds.has(e.target)) {
+                            edgeIdSet.add(e.id);
+                        }
+                    });
+                }
+            });
+        }
+
         this.deletedEdges = currentEdges.filter(e => edgeIdSet.has(e.id)).map(e => ({ ...e }));
         this.deletedEdges.forEach(e => {
             const syn = ctx.synapsesRef.current.get(e.id);

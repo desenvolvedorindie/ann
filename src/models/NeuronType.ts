@@ -1,1 +1,1 @@
-export type NeuronType = 'input' | 'mcculloch-pitts' | 'output' | 'pixel-matrix' | 'layer' | 'bias';
+export type NeuronType = 'input' | 'perceptron' | 'mcculloch-pitts' | 'output' | 'pixel-matrix' | 'tensor' | 'layer' | 'bias' | 'tensor-elem-op' | 'tensor-reduce-op' | 'tensor-matrix-op' | 'tensor-reshape-op';

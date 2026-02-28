@@ -23,21 +23,26 @@ export class PixelMatrix implements INeuron {
     }
 
     calculateOutput(incomingSynapses: ISynapse[] = []): number[] {
-        // Se houver conexões de entrada, a matriz atua como receptora e renderiza o estado delas.
+        // If there are incoming connections, the matrix acts as a receiver and renders their state.
         if (incomingSynapses.length > 0) {
             this.output.fill(0);
             for (const syn of incomingSynapses) {
-                // Previne NaN, assume 0 caso pré-sinaptico não tenha um número válido
-                const inVal = typeof syn.preSynaptic.output === 'number'
-                    ? syn.preSynaptic.output
-                    : 0;
+                // Handle tensor array connections via sourceIndex, or regular number output
+                let inVal = 0;
+                if (Array.isArray(syn.preSynaptic.output)) {
+                    if (syn.sourceIndex !== undefined && syn.sourceIndex >= 0 && syn.sourceIndex < syn.preSynaptic.output.length) {
+                        inVal = syn.preSynaptic.output[syn.sourceIndex];
+                    }
+                } else {
+                    inVal = typeof syn.preSynaptic.output === 'number' ? syn.preSynaptic.output : 0;
+                }
 
-                const val = inVal * syn.weight;
-                if (val > 0 && syn.targetHandle?.startsWith('pixel-in-')) {
+                const val = inVal; // Ignore connection weight for Pixel Matrix
+                if (syn.targetHandle?.startsWith('pixel-in-')) {
                     const idxStr = syn.targetHandle.replace('pixel-in-', '');
                     const idx = parseInt(idxStr, 10);
                     if (!isNaN(idx) && idx >= 0 && idx < this.output.length) {
-                        this.output[idx] = 1; // Ou val se a intenção for matiz, mas pixels usam 0 ou 1
+                        this.output[idx] = val; // Set the actual value
                     }
                 }
             }

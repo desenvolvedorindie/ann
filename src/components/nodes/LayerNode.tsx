@@ -3,7 +3,7 @@ import type { NodeProps, Node } from '@xyflow/react';
 import { Handle, Position, useReactFlow } from '@xyflow/react';
 import { Layers, X } from 'lucide-react';
 import clsx from 'clsx';
-import { NeuralLayer } from '../models/neural';
+import { NeuralLayer } from '../../models/neural';
 
 export type LayerNodeData = Record<string, unknown> & {
     layer: NeuralLayer;
@@ -44,7 +44,7 @@ export const LayerNode: React.FC<NodeProps<Node<LayerNodeData>>> = memo(({ data,
                         deleteElements({ nodes: [{ id }] });
                     }}
                     className="absolute -top-3 -right-3 w-6 h-6 bg-red-500/20 hover:bg-red-500 text-red-500 hover:text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200 z-20 pointer-events-auto"
-                    title="Deletar camada"
+                    title="Delete layer"
                 >
                     <X className="w-4 h-4" />
                 </button>
@@ -55,7 +55,7 @@ export const LayerNode: React.FC<NodeProps<Node<LayerNodeData>>> = memo(({ data,
                     <span className="text-xs font-bold text-slate-200 uppercase tracking-widest">{layer.label}</span>
                     {totalNeurons > 0 && (
                         <span className="text-[10px] font-mono text-slate-400 bg-slate-900 px-1.5 py-0.5 rounded ml-1">
-                            {totalNeurons} {totalNeurons === 1 ? 'neurônio' : 'neurônios'}
+                            {totalNeurons} {totalNeurons === 1 ? 'neuron' : 'neurons'}
                         </span>
                     )}
                 </div>

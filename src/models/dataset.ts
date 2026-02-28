@@ -15,7 +15,7 @@ export interface Dataset {
 export const defaultLogicGates: Dataset[] = [
     {
         id: 'AND',
-        name: 'Porta Lógica: AND',
+        name: 'Logic Gate: AND',
         isReadOnly: true,
         inputColumns: ['X1', 'X2'],
         outputColumns: ['Y'],
@@ -28,7 +28,7 @@ export const defaultLogicGates: Dataset[] = [
     },
     {
         id: 'OR',
-        name: 'Porta Lógica: OR',
+        name: 'Logic Gate: OR',
         isReadOnly: true,
         inputColumns: ['X1', 'X2'],
         outputColumns: ['Y'],
@@ -41,7 +41,7 @@ export const defaultLogicGates: Dataset[] = [
     },
     {
         id: 'NOT',
-        name: 'Porta Lógica: NOT',
+        name: 'Logic Gate: NOT',
         isReadOnly: true,
         inputColumns: ['X1'],
         outputColumns: ['Y'],
@@ -52,7 +52,7 @@ export const defaultLogicGates: Dataset[] = [
     },
     {
         id: 'NAND',
-        name: 'Porta Lógica: NAND',
+        name: 'Logic Gate: NAND',
         isReadOnly: true,
         inputColumns: ['X1', 'X2'],
         outputColumns: ['Y'],
@@ -65,7 +65,7 @@ export const defaultLogicGates: Dataset[] = [
     },
     {
         id: 'NOR',
-        name: 'Porta Lógica: NOR',
+        name: 'Logic Gate: NOR',
         isReadOnly: true,
         inputColumns: ['X1', 'X2'],
         outputColumns: ['Y'],
@@ -78,7 +78,7 @@ export const defaultLogicGates: Dataset[] = [
     },
     {
         id: 'XOR',
-        name: 'Porta Lógica: XOR',
+        name: 'Logic Gate: XOR',
         isReadOnly: true,
         inputColumns: ['X1', 'X2'],
         outputColumns: ['Y'],
@@ -91,7 +91,7 @@ export const defaultLogicGates: Dataset[] = [
     },
     {
         id: 'XNOR',
-        name: 'Porta Lógica: XNOR',
+        name: 'Logic Gate: XNOR',
         isReadOnly: true,
         inputColumns: ['X1', 'X2'],
         outputColumns: ['Y'],
